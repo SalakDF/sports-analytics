@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { fetchJson } from "../api/client";
+import { getCurrentUser } from "../utils/session";
 
 export default function MatchDetailsPage() {
   const { id } = useParams();
@@ -9,6 +10,11 @@ export default function MatchDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [favoriteMessage, setFavoriteMessage] = useState("");
+  const [favoriteError, setFavoriteError] = useState("");
+
   useEffect(() => {
     fetchJson(`/matches/${id}`)
       .then((data) => setMatch(data))
@@ -16,11 +22,75 @@ export default function MatchDetailsPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  useEffect(() => {
+    const user = getCurrentUser();
+
+    if (!user?.id) {
+      setIsFavorite(false);
+      return;
+    }
+
+    fetch(`http://localhost:8080/api/favorites/matches?userId=${user.id}`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error();
+        }
+        return response.json();
+      })
+      .then((favorites) => {
+        const exists = favorites.some(
+          (favoriteMatch) => String(favoriteMatch.matchId) === String(id)
+        );
+        setIsFavorite(exists);
+      })
+      .catch(() => {
+        setIsFavorite(false);
+      });
+  }, [id]);
+
   const getStatusClass = (status) => {
     if (status === "LIVE") return "badge badge-live";
     if (status === "FINISHED") return "badge badge-finished";
     return "badge badge-scheduled";
   };
+
+  async function handleFavoriteAction() {
+    const user = getCurrentUser();
+
+    setFavoriteMessage("");
+    setFavoriteError("");
+
+    if (!user?.id) {
+      setFavoriteError("Please login first to manage favorites.");
+      return;
+    }
+
+    setFavoriteLoading(true);
+
+    try {
+      const url = `http://localhost:8080/api/favorites/matches?userId=${user.id}&matchId=${id}`;
+
+      const response = await fetch(url, {
+        method: isFavorite ? "DELETE" : "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error();
+      }
+
+      if (isFavorite) {
+        setIsFavorite(false);
+        setFavoriteMessage("Match removed from favorites.");
+      } else {
+        setIsFavorite(true);
+        setFavoriteMessage("Match added to favorites.");
+      }
+    } catch {
+      setFavoriteError("Failed to update favorite match.");
+    } finally {
+      setFavoriteLoading(false);
+    }
+  }
 
   if (loading) return <div className="loading-state">Loading match details...</div>;
   if (error) return <div className="error-state">{error}</div>;
@@ -54,6 +124,37 @@ export default function MatchDetailsPage() {
             <div className="meta-row" style={{ justifyContent: "center" }}>
               <span className={getStatusClass(match.status)}>{match.status}</span>
             </div>
+
+            <div className="meta-row" style={{ justifyContent: "center", marginTop: "16px" }}>
+              <button
+                type="button"
+                className={
+                  isFavorite
+                    ? "hero-button hero-button-secondary"
+                    : "hero-button hero-button-primary"
+                }
+                onClick={handleFavoriteAction}
+                disabled={favoriteLoading}
+              >
+                {favoriteLoading
+                  ? "Please wait..."
+                  : isFavorite
+                  ? "Remove from favorites"
+                  : "Add to favorites"}
+              </button>
+            </div>
+
+            {favoriteMessage ? (
+              <div className="loading-state" style={{ marginTop: "16px" }}>
+                {favoriteMessage}
+              </div>
+            ) : null}
+
+            {favoriteError ? (
+              <div className="error-state" style={{ marginTop: "16px" }}>
+                {favoriteError}
+              </div>
+            ) : null}
           </div>
 
           <div className="team-panel">
