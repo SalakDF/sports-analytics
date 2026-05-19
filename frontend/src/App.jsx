@@ -10,7 +10,7 @@ import NotFoundPage from "./pages/NotFoundPage";
 import FavoritesPage from "./pages/FavoritesPage";
 import AuthPage from "./pages/AuthPage";
 
-export default function AppRouter() {
+export default function App() {
   return (
     <Routes>
       <Route path="/" element={<AppLayout />}>
