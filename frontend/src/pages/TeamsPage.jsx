@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchJson } from "../api/client";
 
@@ -9,32 +9,30 @@ export default function TeamsPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchJson("/teams")
-      .then((data) => setTeams(data))
-      .catch(() => setError("Failed to load teams"))
-      .finally(() => setLoading(false));
-  }, []);
+    const timeout = setTimeout(() => {
+      loadTeams();
+    }, 300);
 
-  const filteredTeams = useMemo(() => {
-    const normalized = search.trim().toLowerCase();
+    return () => clearTimeout(timeout);
+  }, [search]);
 
-    if (!normalized) return teams;
+  async function loadTeams() {
+    setLoading(true);
+    setError("");
 
-    return teams.filter((team) => {
-      const name = team.name?.toLowerCase() || "";
-      const shortName = team.shortName?.toLowerCase() || "";
-      const country = team.country?.toLowerCase() || "";
+    try {
+      const query = search.trim()
+        ? `/teams?search=${encodeURIComponent(search.trim())}`
+        : "/teams";
 
-      return (
-        name.includes(normalized) ||
-        shortName.includes(normalized) ||
-        country.includes(normalized)
-      );
-    });
-  }, [teams, search]);
-
-  if (loading) return <div className="loading-state">Loading teams...</div>;
-  if (error) return <div className="error-state">{error}</div>;
+      const data = await fetchJson(query);
+      setTeams(data);
+    } catch {
+      setError("Failed to load teams.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div>
@@ -42,7 +40,7 @@ export default function TeamsPage() {
         <span className="page-kicker">Clubs</span>
         <h1 className="page-title">Teams</h1>
         <p className="page-subtitle">
-          Перегляд футбольних команд із пошуком по назві, короткій назві та країні.
+          Перегляд команд із пошуком через backend API.
         </p>
       </div>
 
@@ -56,37 +54,44 @@ export default function TeamsPage() {
         />
       </div>
 
-      <p className="results-count">Found: {filteredTeams.length}</p>
+      {loading ? <div className="loading-state">Loading teams...</div> : null}
+      {error ? <div className="error-state">{error}</div> : null}
 
-      {!filteredTeams.length ? (
-        <div className="empty-state">No teams found.</div>
-      ) : (
-        <div className="grid grid-2">
-          {filteredTeams.map((team) => (
-            <div className="card" key={team.id}>
-              <h2 className="card-title">
-                {team.name}
-                {team.shortName ? ` (${team.shortName})` : ""}
-              </h2>
+      {!loading && !error ? (
+        <>
+          <p className="results-count">Found: {teams.length}</p>
 
-              <div className="meta-row">
-                <span className="badge">{team.country || "Country -"}</span>
-                <span className="badge">
-                  Founded: {team.foundedYear || "-"}
-                </span>
-              </div>
+          {!teams.length ? (
+            <div className="empty-state">No teams found.</div>
+          ) : (
+            <div className="grid grid-2">
+              {teams.map((team) => (
+                <div className="card" key={team.id}>
+                  <h2 className="card-title">
+                    {team.name}
+                    {team.shortName ? ` (${team.shortName})` : ""}
+                  </h2>
 
-              <p className="card-muted" style={{ marginTop: "14px" }}>
-                {team.description || "No description available."}
-              </p>
+                  <div className="meta-row">
+                    <span className="badge">{team.country || "Country -"}</span>
+                    <span className="badge">
+                      Founded: {team.foundedYear || "-"}
+                    </span>
+                  </div>
 
-              <Link className="action-link" to={`/teams/${team.id}`}>
-                Open team →
-              </Link>
+                  <p className="card-muted" style={{ marginTop: "14px" }}>
+                    {team.description || "No description available."}
+                  </p>
+
+                  <Link className="action-link" to={`/teams/${team.id}`}>
+                    Open team →
+                  </Link>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          )}
+        </>
+      ) : null}
     </div>
   );
 }

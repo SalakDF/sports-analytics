@@ -3,10 +3,7 @@ package com.diplomna.sports_analytics_backend.controller;
 import com.diplomna.sports_analytics_backend.dto.response.TeamResponse;
 import com.diplomna.sports_analytics_backend.service.TeamService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -18,8 +15,10 @@ public class TeamController {
     private final TeamService teamService;
 
     @GetMapping
-    public List<TeamResponse> getAllTeams() {
-        return teamService.getAllTeams();
+    public List<TeamResponse> getTeams(
+            @RequestParam(required = false) String search
+    ) {
+        return teamService.getTeams(search);
     }
 
     @GetMapping("/{id}")

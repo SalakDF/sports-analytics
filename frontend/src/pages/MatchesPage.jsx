@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchJson } from "../api/client";
 
@@ -10,28 +10,40 @@ export default function MatchesPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchJson("/matches")
-      .then((data) => setMatches(data))
-      .catch(() => setError("Failed to load matches"))
-      .finally(() => setLoading(false));
-  }, []);
+    const timeout = setTimeout(() => {
+      loadMatches();
+    }, 300);
 
-  const filteredMatches = useMemo(() => {
-    const normalized = search.trim().toLowerCase();
+    return () => clearTimeout(timeout);
+  }, [search, statusFilter]);
 
-    return matches.filter((match) => {
-      const matchesSearch =
-        !normalized ||
-        match.homeTeamName?.toLowerCase().includes(normalized) ||
-        match.awayTeamName?.toLowerCase().includes(normalized) ||
-        match.tournamentName?.toLowerCase().includes(normalized);
+  async function loadMatches() {
+    setLoading(true);
+    setError("");
 
-      const matchesStatus =
-        statusFilter === "ALL" || match.status === statusFilter;
+    try {
+      const params = new URLSearchParams();
 
-      return matchesSearch && matchesStatus;
-    });
-  }, [matches, search, statusFilter]);
+      if (search.trim()) {
+        params.set("search", search.trim());
+      }
+
+      if (statusFilter !== "ALL") {
+        params.set("status", statusFilter);
+      }
+
+      const query = params.toString()
+        ? `/matches?${params.toString()}`
+        : "/matches";
+
+      const data = await fetchJson(query);
+      setMatches(data);
+    } catch {
+      setError("Failed to load matches.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const getStatusClass = (status) => {
     if (status === "LIVE") return "badge badge-live";
@@ -39,16 +51,13 @@ export default function MatchesPage() {
     return "badge badge-scheduled";
   };
 
-  if (loading) return <div className="loading-state">Loading matches...</div>;
-  if (error) return <div className="error-state">{error}</div>;
-
   return (
     <div>
       <div className="page-header">
         <span className="page-kicker">Fixtures</span>
         <h1 className="page-title">Matches</h1>
         <p className="page-subtitle">
-          Список матчів сезону з пошуком по командах і базовою фільтрацією за статусом.
+          Список матчів з backend-пошуком і фільтрацією за статусом.
         </p>
       </div>
 
@@ -75,43 +84,52 @@ export default function MatchesPage() {
         </select>
       </div>
 
-      <p className="results-count">Found: {filteredMatches.length}</p>
+      {loading ? <div className="loading-state">Loading matches...</div> : null}
+      {error ? <div className="error-state">{error}</div> : null}
 
-      {!filteredMatches.length ? (
-        <div className="empty-state">No matches found.</div>
-      ) : (
-        <div className="grid grid-2">
-          {filteredMatches.map((match) => (
-            <div className="card" key={match.id}>
-              <h2 className="card-title">
-                {match.homeTeamName} vs {match.awayTeamName}
-              </h2>
+      {!loading && !error ? (
+        <>
+          <p className="results-count">Found: {matches.length}</p>
 
-              <p className="card-muted">
-                {match.tournamentName} • {match.seasonName}
-              </p>
+          {!matches.length ? (
+            <div className="empty-state">No matches found.</div>
+          ) : (
+            <div className="grid grid-2">
+              {matches.map((match) => (
+                <div className="card" key={match.id}>
+                  <h2 className="card-title">
+                    {match.homeTeamName} vs {match.awayTeamName}
+                  </h2>
 
-              <div className="meta-row">
-                <span className={getStatusClass(match.status)}>
-                  {match.status}
-                </span>
-                <span className="badge">
-                  Score: {match.homeScore ?? "-"} : {match.awayScore ?? "-"}
-                </span>
-                <span className="badge">{match.roundName || "Round -"}</span>
-              </div>
+                  <p className="card-muted">
+                    {match.tournamentName} • {match.seasonName}
+                  </p>
 
-              <p className="card-muted" style={{ marginTop: "14px" }}>
-                Venue: {match.venue || "-"}
-              </p>
+                  <div className="meta-row">
+                    <span className={getStatusClass(match.status)}>
+                      {match.status}
+                    </span>
+                    <span className="badge">
+                      Score: {match.homeScore ?? "-"} : {match.awayScore ?? "-"}
+                    </span>
+                    <span className="badge">
+                      {match.roundName || "Round -"}
+                    </span>
+                  </div>
 
-              <Link className="action-link" to={`/matches/${match.id}`}>
-                Open match →
-              </Link>
+                  <p className="card-muted" style={{ marginTop: "14px" }}>
+                    Venue: {match.venue || "-"}
+                  </p>
+
+                  <Link className="action-link" to={`/matches/${match.id}`}>
+                    Open match →
+                  </Link>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          )}
+        </>
+      ) : null}
     </div>
   );
 }

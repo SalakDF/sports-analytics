@@ -3,10 +3,15 @@ package com.diplomna.sports_analytics_backend.repository;
 import com.diplomna.sports_analytics_backend.entity.Team;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import  java.util.List;
+import java.util.List;
+
 public interface TeamRepository extends JpaRepository<Team, Long> {
 
-    List<Team> findByNameContainingIgnoreCase (String name);
+    List<Team> findAllByOrderByNameAsc();
 
-    List<Team> findByCountryIgnoreCase (String country);
+    List<Team> findByNameContainingIgnoreCaseOrShortNameContainingIgnoreCaseOrCountryContainingIgnoreCaseOrderByNameAsc(
+            String name,
+            String shortName,
+            String country
+    );
 }

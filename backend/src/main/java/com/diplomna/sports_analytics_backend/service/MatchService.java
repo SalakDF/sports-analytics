@@ -2,7 +2,9 @@ package com.diplomna.sports_analytics_backend.service;
 
 import com.diplomna.sports_analytics_backend.dto.response.MatchResponse;
 import com.diplomna.sports_analytics_backend.entity.Match;
+import com.diplomna.sports_analytics_backend.entity.MatchStatus;
 import com.diplomna.sports_analytics_backend.repository.MatchRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -10,13 +12,24 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class MatchService {
 
     private final MatchRepository matchRepository;
 
-    public List<MatchResponse> getAllMatches() {
-        return matchRepository.findAll()
-                .stream()
+    public List<MatchResponse> getMatches(String search, MatchStatus status) {
+        String normalizedSearch =
+                (search == null || search.isBlank()) ? null : search.trim();
+
+        List<Match> matches;
+
+        if (normalizedSearch == null && status == null) {
+            matches = matchRepository.findAllByOrderByScheduledAtDesc();
+        } else {
+            matches = matchRepository.searchMatches(normalizedSearch, status);
+        }
+
+        return matches.stream()
                 .map(this::toResponse)
                 .toList();
     }

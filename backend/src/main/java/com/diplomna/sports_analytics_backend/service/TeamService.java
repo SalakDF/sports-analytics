@@ -3,6 +3,7 @@ package com.diplomna.sports_analytics_backend.service;
 import com.diplomna.sports_analytics_backend.dto.response.TeamResponse;
 import com.diplomna.sports_analytics_backend.entity.Team;
 import com.diplomna.sports_analytics_backend.repository.TeamRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -10,13 +11,27 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class TeamService {
 
     private final TeamRepository teamRepository;
 
-    public List<TeamResponse> getAllTeams() {
-        return teamRepository.findAll()
-                .stream()
+    public List<TeamResponse> getTeams(String search) {
+        List<Team> teams;
+
+        if (search == null || search.isBlank()) {
+            teams = teamRepository.findAllByOrderByNameAsc();
+        } else {
+            String value = search.trim();
+            teams = teamRepository
+                    .findByNameContainingIgnoreCaseOrShortNameContainingIgnoreCaseOrCountryContainingIgnoreCaseOrderByNameAsc(
+                            value,
+                            value,
+                            value
+                    );
+        }
+
+        return teams.stream()
                 .map(this::toResponse)
                 .toList();
     }
