@@ -1,6 +1,8 @@
 package com.diplomna.sports_analytics_backend.controller;
 
+import com.diplomna.sports_analytics_backend.dto.response.MatchResponse;
 import com.diplomna.sports_analytics_backend.dto.response.TeamResponse;
+import com.diplomna.sports_analytics_backend.service.MatchService;
 import com.diplomna.sports_analytics_backend.service.TeamService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -13,6 +15,7 @@ import java.util.List;
 public class TeamController {
 
     private final TeamService teamService;
+    private final MatchService matchService;
 
     @GetMapping
     public List<TeamResponse> getTeams(
@@ -24,5 +27,10 @@ public class TeamController {
     @GetMapping("/{id}")
     public TeamResponse getTeamById(@PathVariable Long id) {
         return teamService.getTeamById(id);
+    }
+
+    @GetMapping("/{id}/recent-matches")
+    public List<MatchResponse> getRecentMatchesByTeamId(@PathVariable Long id) {
+        return matchService.getRecentMatchesByTeamId(id);
     }
 }

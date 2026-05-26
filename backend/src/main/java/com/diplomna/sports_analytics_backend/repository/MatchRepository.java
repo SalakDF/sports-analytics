@@ -12,6 +12,8 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
 
     List<Match> findAllByOrderByScheduledAtDesc();
 
+    List<Match> findAllByStatusOrderByScheduledAtDesc(MatchStatus status);
+
     @Query("""
             select distinct m
             from Match m
@@ -19,15 +21,39 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
             join s.tournament t
             join m.homeTeam ht
             join m.awayTeam at
-            where (:search is null
-                   or lower(ht.name) like lower(concat('%', :search, '%'))
-                   or lower(at.name) like lower(concat('%', :search, '%'))
-                   or lower(t.name) like lower(concat('%', :search, '%')))
-              and (:status is null or m.status = :status)
+            where lower(ht.name) like lower(concat('%', :search, '%'))
+               or lower(at.name) like lower(concat('%', :search, '%'))
+               or lower(t.name) like lower(concat('%', :search, '%'))
             order by m.scheduledAt desc
             """)
-    List<Match> searchMatches(
+    List<Match> searchMatches(@Param("search") String search);
+
+    @Query("""
+            select distinct m
+            from Match m
+            join m.season s
+            join s.tournament t
+            join m.homeTeam ht
+            join m.awayTeam at
+            where (
+                    lower(ht.name) like lower(concat('%', :search, '%'))
+                 or lower(at.name) like lower(concat('%', :search, '%'))
+                 or lower(t.name) like lower(concat('%', :search, '%'))
+            )
+            and m.status = :status
+            order by m.scheduledAt desc
+            """)
+    List<Match> searchMatchesByStatus(
             @Param("search") String search,
             @Param("status") MatchStatus status
     );
+
+    @Query("""
+            select m
+            from Match m
+            where (m.homeTeam.id = :teamId or m.awayTeam.id = :teamId)
+              and m.status = com.diplomna.sports_analytics_backend.entity.MatchStatus.FINISHED
+            order by m.scheduledAt desc
+            """)
+    List<Match> findRecentFinishedMatchesByTeamId(@Param("teamId") Long teamId);
 }

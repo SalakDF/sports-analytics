@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiRequest, fetchJson } from "../api/client";
 import { getCurrentUser } from "../utils/session";
+import TeamLogo from "../components/common/TeamLogo";
 
 export default function MatchDetailsPage() {
   const { id } = useParams();
@@ -62,12 +63,9 @@ export default function MatchDetailsPage() {
     setFavoriteLoading(true);
 
     try {
-      await apiRequest(
-        `/favorites/matches?userId=${user.id}&matchId=${id}`,
-        {
-          method: isFavorite ? "DELETE" : "POST",
-        }
-      );
+      await apiRequest(`/favorites/matches?userId=${user.id}&matchId=${id}`, {
+        method: isFavorite ? "DELETE" : "POST",
+      });
 
       if (isFavorite) {
         setIsFavorite(false);
@@ -89,116 +87,133 @@ export default function MatchDetailsPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <span className="page-kicker">Match Center</span>
-        <h1 className="page-title">
-          {match.homeTeamName} vs {match.awayTeamName}
-        </h1>
-        <p className="page-subtitle">
-          Детальна сторінка матчу з основною інформацією про команди, рахунок,
-          статус гри та турнір.
-        </p>
-      </div>
-
-      <div className="hero-card">
-        <div className="match-scoreboard">
-          <div className="team-panel">
-            <div className="team-name">{match.homeTeamName}</div>
-            <div className="team-meta">Home Team</div>
-          </div>
-
-          <div className="score-panel">
-            <div className="score-value">
-              {match.homeScore ?? "-"} : {match.awayScore ?? "-"}
-            </div>
-
-            <div className="meta-row" style={{ justifyContent: "center" }}>
+      <div className="detail-hero">
+        <div className="detail-hero-main">
+          <div className="detail-hero-top">
+            <span className="page-kicker">Match Center</span>
+            <div className="meta-row" style={{ marginTop: 0 }}>
               <span className={getStatusClass(match.status)}>{match.status}</span>
+              <span className="badge">{match.roundName || "Round -"}</span>
+              <span className="badge">{match.venue || "Venue -"}</span>
+            </div>
+          </div>
+
+          <div className="match-detail-scoreboard">
+            <div className="match-detail-team">
+              <TeamLogo
+                name={match.homeTeamName}
+                logoUrl={match.homeTeamLogoUrl}
+                size="lg"
+              />
+              <div className="match-detail-team-name">{match.homeTeamName}</div>
+              <div className="team-inline-subtitle">Home Team</div>
             </div>
 
-            <div
-              className="meta-row"
-              style={{ justifyContent: "center", marginTop: "16px" }}
+            <div className="match-detail-center">
+              <div className="match-detail-score">
+                {match.homeScore ?? "-"} : {match.awayScore ?? "-"}
+              </div>
+              <div className="detail-subtitle" style={{ textAlign: "center" }}>
+                {match.scheduledAt
+                  ? new Date(match.scheduledAt).toLocaleString()
+                  : "Date not available"}
+              </div>
+            </div>
+
+            <div className="match-detail-team">
+              <TeamLogo
+                name={match.awayTeamName}
+                logoUrl={match.awayTeamLogoUrl}
+                size="lg"
+              />
+              <div className="match-detail-team-name">{match.awayTeamName}</div>
+              <div className="team-inline-subtitle">Away Team</div>
+            </div>
+          </div>
+
+          <div className="detail-actions">
+            <button
+              type="button"
+              className={
+                isFavorite
+                  ? "hero-button hero-button-secondary"
+                  : "hero-button hero-button-primary"
+              }
+              onClick={handleFavoriteAction}
+              disabled={favoriteLoading}
             >
-              <button
-                type="button"
-                className={
-                  isFavorite
-                    ? "hero-button hero-button-secondary"
-                    : "hero-button hero-button-primary"
-                }
-                onClick={handleFavoriteAction}
-                disabled={favoriteLoading}
-              >
-                {favoriteLoading
-                  ? "Please wait..."
-                  : isFavorite
-                  ? "Remove from favorites"
-                  : "Add to favorites"}
-              </button>
+              {favoriteLoading
+                ? "Please wait..."
+                : isFavorite
+                ? "Remove from favorites"
+                : "Add to favorites"}
+            </button>
+
+            <Link to="/matches" className="hero-button hero-button-secondary">
+              Back to matches
+            </Link>
+          </div>
+
+          {favoriteMessage ? (
+            <div className="loading-state" style={{ marginTop: "16px" }}>
+              {favoriteMessage}
             </div>
+          ) : null}
 
-            {favoriteMessage ? (
-              <div className="loading-state" style={{ marginTop: "16px" }}>
-                {favoriteMessage}
-              </div>
-            ) : null}
-
-            {favoriteError ? (
-              <div className="error-state" style={{ marginTop: "16px" }}>
-                {favoriteError}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="team-panel">
-            <div className="team-name">{match.awayTeamName}</div>
-            <div className="team-meta">Away Team</div>
-          </div>
+          {favoriteError ? (
+            <div className="error-state" style={{ marginTop: "16px" }}>
+              {favoriteError}
+            </div>
+          ) : null}
         </div>
       </div>
 
       <div className="grid grid-2" style={{ marginTop: "22px" }}>
-        <div className="card">
+        <div className="card detail-card">
           <h2 className="section-title">Match Info</h2>
 
-          <p className="card-muted">
-            <strong>Tournament:</strong> {match.tournamentName || "-"}
-          </p>
-          <p className="card-muted">
-            <strong>Season:</strong> {match.seasonName || "-"}
-          </p>
-          <p className="card-muted">
-            <strong>Round:</strong> {match.roundName || "-"}
-          </p>
-          <p className="card-muted">
-            <strong>Venue:</strong> {match.venue || "-"}
-          </p>
-          <p className="card-muted">
-            <strong>Date:</strong>{" "}
-            {match.scheduledAt
-              ? new Date(match.scheduledAt).toLocaleString()
-              : "-"}
-          </p>
+          <div className="detail-info-grid">
+            <div className="detail-info-item">
+              <span className="detail-info-label">Tournament</span>
+              <span className="detail-info-value">
+                {match.tournamentName || "-"}
+              </span>
+            </div>
+
+            <div className="detail-info-item">
+              <span className="detail-info-label">Season</span>
+              <span className="detail-info-value">{match.seasonName || "-"}</span>
+            </div>
+
+            <div className="detail-info-item">
+              <span className="detail-info-label">Round</span>
+              <span className="detail-info-value">{match.roundName || "-"}</span>
+            </div>
+
+            <div className="detail-info-item">
+              <span className="detail-info-label">Venue</span>
+              <span className="detail-info-value">{match.venue || "-"}</span>
+            </div>
+          </div>
         </div>
 
-        <div className="card">
+        <div className="card detail-card">
           <h2 className="section-title">Quick Navigation</h2>
 
-          <p className="card-muted">
+          <p className="detail-paragraph">
             Тут пізніше можна буде додати розширену статистику матчу, події гри,
-            форму команд і кнопку додавання в обране.
+            форму команд, xG, shots, possession та інші аналітичні показники.
           </p>
 
-          <div className="meta-row">
-            <Link className="action-link" to="/matches">
-              ← Back to matches
-            </Link>
+          <div className="detail-links-column">
             <Link className="action-link" to={`/teams/${match.homeTeamId}`}>
-              Home team →
+              Open home team →
             </Link>
             <Link className="action-link" to={`/teams/${match.awayTeamId}`}>
-              Away team →
+              Open away team →
+            </Link>
+            <Link className="action-link" to="/matches">
+              ← Back to matches
             </Link>
           </div>
         </div>

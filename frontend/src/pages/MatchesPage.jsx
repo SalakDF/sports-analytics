@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchJson } from "../api/client";
+import TeamLogo from "../components/common/TeamLogo";
 
 export default function MatchesPage() {
   const [matches, setMatches] = useState([]);
@@ -97,29 +98,51 @@ export default function MatchesPage() {
             <div className="grid grid-2">
               {matches.map((match) => (
                 <div className="card" key={match.id}>
-                  <h2 className="card-title">
-                    {match.homeTeamName} vs {match.awayTeamName}
-                  </h2>
+                  <div className="match-card-header">
+                    <div className="match-teams-stack">
+                      <div className="team-inline">
+                        <TeamLogo
+                          name={match.homeTeamName}
+                          logoUrl={match.homeTeamLogoUrl}
+                          size="sm"
+                        />
+                        <div className="team-inline-text">
+                          <div className="team-inline-name">{match.homeTeamName}</div>
+                          <div className="team-inline-subtitle">Home</div>
+                        </div>
+                      </div>
 
-                  <p className="card-muted">
+                      <div className="team-inline">
+                        <TeamLogo
+                          name={match.awayTeamName}
+                          logoUrl={match.awayTeamLogoUrl}
+                          size="sm"
+                        />
+                        <div className="team-inline-text">
+                          <div className="team-inline-name">{match.awayTeamName}</div>
+                          <div className="team-inline-subtitle">Away</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: "right" }}>
+                      <div className="score-value" style={{ fontSize: "28px", marginBottom: "8px" }}>
+                        {match.homeScore ?? "-"} : {match.awayScore ?? "-"}
+                      </div>
+                      <span className={getStatusClass(match.status)}>
+                        {match.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="card-muted" style={{ marginTop: "16px" }}>
                     {match.tournamentName} • {match.seasonName}
                   </p>
 
                   <div className="meta-row">
-                    <span className={getStatusClass(match.status)}>
-                      {match.status}
-                    </span>
-                    <span className="badge">
-                      Score: {match.homeScore ?? "-"} : {match.awayScore ?? "-"}
-                    </span>
-                    <span className="badge">
-                      {match.roundName || "Round -"}
-                    </span>
+                    <span className="badge">{match.roundName || "Round -"}</span>
+                    <span className="badge">Venue: {match.venue || "-"}</span>
                   </div>
-
-                  <p className="card-muted" style={{ marginTop: "14px" }}>
-                    Venue: {match.venue || "-"}
-                  </p>
 
                   <Link className="action-link" to={`/matches/${match.id}`}>
                     Open match →

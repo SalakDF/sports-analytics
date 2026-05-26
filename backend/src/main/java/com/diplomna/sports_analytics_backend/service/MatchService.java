@@ -25,11 +25,23 @@ public class MatchService {
 
         if (normalizedSearch == null && status == null) {
             matches = matchRepository.findAllByOrderByScheduledAtDesc();
+        } else if (normalizedSearch == null) {
+            matches = matchRepository.findAllByStatusOrderByScheduledAtDesc(status);
+        } else if (status == null) {
+            matches = matchRepository.searchMatches(normalizedSearch);
         } else {
-            matches = matchRepository.searchMatches(normalizedSearch, status);
+            matches = matchRepository.searchMatchesByStatus(normalizedSearch, status);
         }
 
         return matches.stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    public List<MatchResponse> getRecentMatchesByTeamId(Long teamId) {
+        return matchRepository.findRecentFinishedMatchesByTeamId(teamId)
+                .stream()
+                .limit(5)
                 .map(this::toResponse)
                 .toList();
     }

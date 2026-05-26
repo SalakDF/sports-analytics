@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchJson } from "../api/client";
+import TeamLogo from "../components/common/TeamLogo";
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState([]);
@@ -67,13 +68,25 @@ export default function TeamsPage() {
             <div className="grid grid-2">
               {teams.map((team) => (
                 <div className="card" key={team.id}>
-                  <h2 className="card-title">
-                    {team.name}
-                    {team.shortName ? ` (${team.shortName})` : ""}
-                  </h2>
+                  <div className="team-inline" style={{ marginBottom: "14px" }}>
+                    <TeamLogo
+                      name={team.name}
+                      shortName={team.shortName}
+                      logoUrl={team.logoUrl}
+                    />
+
+                    <div className="team-inline-text">
+                      <div className="team-inline-name">
+                        {team.name}
+                        {team.shortName ? ` (${team.shortName})` : ""}
+                      </div>
+                      <div className="team-inline-subtitle">
+                        {team.country || "Country not specified"}
+                      </div>
+                    </div>
+                  </div>
 
                   <div className="meta-row">
-                    <span className="badge">{team.country || "Country -"}</span>
                     <span className="badge">
                       Founded: {team.foundedYear || "-"}
                     </span>
