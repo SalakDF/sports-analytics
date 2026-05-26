@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { fetchJson } from "../api/client";
+import { apiRequest, fetchJson } from "../api/client";
 import { getCurrentUser } from "../utils/session";
 
 export default function TeamDetailsPage() {
@@ -30,13 +30,7 @@ export default function TeamDetailsPage() {
       return;
     }
 
-    fetch(`http://localhost:8080/api/favorites/teams?userId=${user.id}`)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error();
-        }
-        return response.json();
-      })
+    fetchJson(`/favorites/teams?userId=${user.id}`)
       .then((favorites) => {
         const exists = favorites.some(
           (favoriteTeam) => String(favoriteTeam.teamId) === String(id)
@@ -62,15 +56,12 @@ export default function TeamDetailsPage() {
     setFavoriteLoading(true);
 
     try {
-      const url = `http://localhost:8080/api/favorites/teams?userId=${user.id}&teamId=${id}`;
-
-      const response = await fetch(url, {
-        method: isFavorite ? "DELETE" : "POST",
-      });
-
-      if (!response.ok) {
-        throw new Error();
-      }
+      await apiRequest(
+        `/favorites/teams?userId=${user.id}&teamId=${id}`,
+        {
+          method: isFavorite ? "DELETE" : "POST",
+        }
+      );
 
       if (isFavorite) {
         setIsFavorite(false);

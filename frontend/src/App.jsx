@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import AppLayout from "./components/layout/AppLayout";
+import ProtectedRoute from "./components/auth/ProtectedRoute";
 import HomePage from "./pages/HomePage";
 import MatchesPage from "./pages/MatchesPage";
 import MatchDetailsPage from "./pages/MatchDetailsPage";
@@ -20,10 +21,17 @@ export default function App() {
         <Route path="teams" element={<TeamsPage />} />
         <Route path="teams/:id" element={<TeamDetailsPage />} />
         <Route path="standings" element={<StandingsPage />} />
-        <Route path="favorites" element={<FavoritesPage />} />
+        <Route
+          path="favorites"
+          element={
+            <ProtectedRoute>
+              <FavoritesPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="auth" element={<AuthPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
   );
-}
+}   

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { deleteRequest, fetchJson } from "../api/client";
 import { getCurrentUser } from "../utils/session";
 
 export default function FavoritesPage() {
@@ -29,17 +30,10 @@ export default function FavoritesPage() {
     }
 
     try {
-      const [teamsResponse, matchesResponse] = await Promise.all([
-        fetch(`http://localhost:8080/api/favorites/teams?userId=${user.id}`),
-        fetch(`http://localhost:8080/api/favorites/matches?userId=${user.id}`),
+      const [teams, matches] = await Promise.all([
+        fetchJson(`/favorites/teams?userId=${user.id}`),
+        fetchJson(`/favorites/matches?userId=${user.id}`),
       ]);
-
-      if (!teamsResponse.ok || !matchesResponse.ok) {
-        throw new Error();
-      }
-
-      const teams = await teamsResponse.json();
-      const matches = await matchesResponse.json();
 
       setFavoriteTeams(teams);
       setFavoriteMatches(matches);
@@ -62,17 +56,7 @@ export default function FavoritesPage() {
     }
 
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/favorites/teams?userId=${user.id}&teamId=${teamId}`,
-        {
-          method: "DELETE",
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error();
-      }
-
+      await deleteRequest(`/favorites/teams?userId=${user.id}&teamId=${teamId}`);
       setFavoriteTeams((prev) => prev.filter((team) => team.teamId !== teamId));
       setActionMessage("Team removed from favorites.");
     } catch {
@@ -92,17 +76,9 @@ export default function FavoritesPage() {
     }
 
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/favorites/matches?userId=${user.id}&matchId=${matchId}`,
-        {
-          method: "DELETE",
-        }
+      await deleteRequest(
+        `/favorites/matches?userId=${user.id}&matchId=${matchId}`
       );
-
-      if (!response.ok) {
-        throw new Error();
-      }
-
       setFavoriteMatches((prev) =>
         prev.filter((match) => match.matchId !== matchId)
       );

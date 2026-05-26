@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { postJson } from "../api/client";
 import { saveCurrentUser } from "../utils/session";
 
 export default function AuthPage() {
@@ -12,10 +13,7 @@ export default function AuthPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const endpoint =
-    mode === "login"
-      ? "http://localhost:8080/api/auth/login"
-      : "http://localhost:8080/api/auth/register";
+  const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -24,19 +22,7 @@ export default function AuthPage() {
     setMessage("");
 
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Authentication request failed");
-      }
-
-      const data = await response.json();
+      const data = await postJson(endpoint, { email, password });
       saveCurrentUser(data);
 
       setMessage(

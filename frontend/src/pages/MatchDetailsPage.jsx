@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { fetchJson } from "../api/client";
+import { apiRequest, fetchJson } from "../api/client";
 import { getCurrentUser } from "../utils/session";
 
 export default function MatchDetailsPage() {
@@ -30,13 +30,7 @@ export default function MatchDetailsPage() {
       return;
     }
 
-    fetch(`http://localhost:8080/api/favorites/matches?userId=${user.id}`)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error();
-        }
-        return response.json();
-      })
+    fetchJson(`/favorites/matches?userId=${user.id}`)
       .then((favorites) => {
         const exists = favorites.some(
           (favoriteMatch) => String(favoriteMatch.matchId) === String(id)
@@ -68,15 +62,12 @@ export default function MatchDetailsPage() {
     setFavoriteLoading(true);
 
     try {
-      const url = `http://localhost:8080/api/favorites/matches?userId=${user.id}&matchId=${id}`;
-
-      const response = await fetch(url, {
-        method: isFavorite ? "DELETE" : "POST",
-      });
-
-      if (!response.ok) {
-        throw new Error();
-      }
+      await apiRequest(
+        `/favorites/matches?userId=${user.id}&matchId=${id}`,
+        {
+          method: isFavorite ? "DELETE" : "POST",
+        }
+      );
 
       if (isFavorite) {
         setIsFavorite(false);
@@ -125,7 +116,10 @@ export default function MatchDetailsPage() {
               <span className={getStatusClass(match.status)}>{match.status}</span>
             </div>
 
-            <div className="meta-row" style={{ justifyContent: "center", marginTop: "16px" }}>
+            <div
+              className="meta-row"
+              style={{ justifyContent: "center", marginTop: "16px" }}
+            >
               <button
                 type="button"
                 className={
