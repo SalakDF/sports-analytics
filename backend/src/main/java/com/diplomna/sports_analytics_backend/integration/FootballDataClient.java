@@ -28,6 +28,18 @@ public class FootballDataClient {
         return sendGet("/competitions");
     }
 
+    public String getCompetitionMatches(String competitionCode) {
+        return sendGet("/competitions/" + competitionCode + "/matches");
+    }
+
+    public String getCompetitionStandings(String competitionCode) {
+        return sendGet("/competitions/" + competitionCode + "/standings");
+    }
+
+    public String getTeamMatches(Long teamId) {
+        return sendGet("/teams/" + teamId + "/matches");
+    }
+
     private String sendGet(String path) {
         if (apiToken == null || apiToken.isBlank()) {
             throw new RuntimeException("FOOTBALL_DATA_API_TOKEN is missing");

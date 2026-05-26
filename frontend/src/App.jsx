@@ -7,9 +7,14 @@ import MatchDetailsPage from "./pages/MatchDetailsPage";
 import TeamsPage from "./pages/TeamsPage";
 import TeamDetailsPage from "./pages/TeamDetailsPage";
 import StandingsPage from "./pages/StandingsPage";
-import NotFoundPage from "./pages/NotFoundPage";
 import FavoritesPage from "./pages/FavoritesPage";
 import AuthPage from "./pages/AuthPage";
+import NotFoundPage from "./pages/NotFoundPage";
+import ExternalMatchesPage from "./pages/ExternalMatchesPage";
+import ExternalStandingsPage from "./pages/ExternalStandingsPage";
+import ExternalTeamMatchesPage from "./pages/ExternalTeamMatchesPage";
+import ImportedMatchesPage from "./pages/ImportedMatchesPage";
+import ExternalTeamMappingsPage from "./pages/ExternalTeamMappingsPage";
 
 export default function App() {
   return (
@@ -21,6 +26,11 @@ export default function App() {
         <Route path="teams" element={<TeamsPage />} />
         <Route path="teams/:id" element={<TeamDetailsPage />} />
         <Route path="standings" element={<StandingsPage />} />
+        <Route path="external-matches" element={<ExternalMatchesPage />} />
+        <Route path="external-standings" element={<ExternalStandingsPage />} />
+        <Route path="external-teams/:teamId/matches" element={<ExternalTeamMatchesPage />} />
+        <Route path="imported-matches" element={<ImportedMatchesPage />} />
+        <Route path="external-team-mappings" element={<ExternalTeamMappingsPage />} />
         <Route
           path="favorites"
           element={
@@ -34,4 +44,4 @@ export default function App() {
       </Route>
     </Routes>
   );
-}   
+}

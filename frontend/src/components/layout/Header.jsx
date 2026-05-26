@@ -36,6 +36,22 @@ export default function Header() {
             Standings
           </NavLink>
 
+          <NavLink to="/external-matches" className={getLinkClass}>
+            External Matches
+          </NavLink>
+
+          <NavLink to="/external-standings" className={getLinkClass}>
+            External Table
+          </NavLink>
+
+          <NavLink to="/imported-matches" className={getLinkClass}>
+            Imported
+          </NavLink>
+
+          <NavLink to="/external-team-mappings" className={getLinkClass}>
+            Team Mapping
+          </NavLink>
+
           {currentUser?.id ? (
             <NavLink to="/favorites" className={getLinkClass}>
               Favorites
