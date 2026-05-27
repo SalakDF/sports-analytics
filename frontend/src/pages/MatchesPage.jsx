@@ -46,11 +46,11 @@ export default function MatchesPage() {
     }
   }
 
-  const getStatusClass = (status) => {
+  function getStatusClass(status) {
     if (status === "LIVE") return "badge badge-live";
     if (status === "FINISHED") return "badge badge-finished";
     return "badge badge-scheduled";
-  };
+  }
 
   return (
     <div>
@@ -58,15 +58,16 @@ export default function MatchesPage() {
         <span className="page-kicker">Fixtures</span>
         <h1 className="page-title">Matches</h1>
         <p className="page-subtitle">
-          Список матчів з backend-пошуком і фільтрацією за статусом.
+          Список матчів із backend-пошуком, фільтрацією за статусом і переходом
+          на детальні сторінки.
         </p>
       </div>
 
-      <div className="filters-bar">
+      <div className="filters-bar matches-filters-bar">
         <input
           type="text"
           className="search-input"
-          placeholder="Search by teams or tournament..."
+          placeholder="Search by team or tournament..."
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -90,14 +91,23 @@ export default function MatchesPage() {
 
       {!loading && !error ? (
         <>
-          <p className="results-count">Found: {matches.length}</p>
+          <p className="results-count">Found matches: {matches.length}</p>
 
           {!matches.length ? (
             <div className="empty-state">No matches found.</div>
           ) : (
             <div className="grid grid-2">
               {matches.map((match) => (
-                <div className="card" key={match.id}>
+                <div className="card match-list-card match-list-card-premium" key={match.id}>
+                  <div className="match-list-topline">
+                    <div className="match-list-competition">
+                      {match.tournamentName || "Tournament -"}
+                    </div>
+                    <span className={getStatusClass(match.status)}>
+                      {match.status}
+                    </span>
+                  </div>
+
                   <div className="match-card-header">
                     <div className="match-teams-stack">
                       <div className="team-inline">
@@ -125,24 +135,29 @@ export default function MatchesPage() {
                       </div>
                     </div>
 
-                    <div style={{ textAlign: "right" }}>
-                      <div className="score-value" style={{ fontSize: "28px", marginBottom: "8px" }}>
+                    <div className="match-list-score match-score-panel">
+                      <div className="match-list-score-value">
                         {match.homeScore ?? "-"} : {match.awayScore ?? "-"}
                       </div>
-                      <span className={getStatusClass(match.status)}>
-                        {match.status}
-                      </span>
+                      <div className="team-inline-subtitle">
+                        {match.scheduledAt
+                          ? new Date(match.scheduledAt).toLocaleDateString()
+                          : "No date"}
+                      </div>
                     </div>
                   </div>
 
-                  <p className="card-muted" style={{ marginTop: "16px" }}>
-                    {match.tournamentName} • {match.seasonName}
-                  </p>
-
-                  <div className="meta-row">
+                  <div className="match-list-meta">
+                    <span className="badge">{match.seasonName || "Season -"}</span>
                     <span className="badge">{match.roundName || "Round -"}</span>
                     <span className="badge">Venue: {match.venue || "-"}</span>
                   </div>
+
+                  <p className="card-muted" style={{ marginTop: "14px" }}>
+                    {match.scheduledAt
+                      ? new Date(match.scheduledAt).toLocaleString()
+                      : "Date not available"}
+                  </p>
 
                   <Link className="action-link" to={`/matches/${match.id}`}>
                     Open match →

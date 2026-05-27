@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchJson, postJson } from "../api/client";
+import { apiRequest, fetchJson, postJson, postRequest } from "../api/client";
 import TeamLogo from "../components/common/TeamLogo";
 
 const COMPETITIONS = [
@@ -18,6 +18,8 @@ export default function ExternalTeamMappingsPage() {
   const [drafts, setDrafts] = useState({});
   const [loading, setLoading] = useState(true);
   const [saveLoadingId, setSaveLoadingId] = useState(null);
+  const [deleteLoadingId, setDeleteLoadingId] = useState(null);
+  const [autoMapLoading, setAutoMapLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -94,6 +96,55 @@ export default function ExternalTeamMappingsPage() {
     }
   }
 
+  async function handleDelete(row) {
+    setDeleteLoadingId(row.teamId);
+    setError("");
+    setMessage("");
+
+    try {
+      await apiRequest(`/external/football/team-mappings/${row.teamId}`, {
+        method: "DELETE",
+      });
+
+      setMappings((prev) =>
+        prev.filter((item) => String(item.externalTeamId) !== String(row.teamId))
+      );
+
+      setDrafts((prev) => ({
+        ...prev,
+        [row.teamId]: "",
+      }));
+
+      setMessage(`Deleted mapping for ${row.teamName}.`);
+    } catch {
+      setError("Failed to delete team mapping.");
+    } finally {
+      setDeleteLoadingId(null);
+    }
+  }
+
+  async function handleAutoMap() {
+    setAutoMapLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const result = await postRequest(
+        `/external/football/team-mappings/auto?competitionCode=${competitionCode}`
+      );
+
+      setMessage(
+        `Auto-map completed. Total external teams: ${result.totalExternalTeams}, newly mapped: ${result.mappedCount}, already mapped: ${result.alreadyMappedCount}, skipped: ${result.skippedCount}.`
+      );
+
+      await loadPageData();
+    } catch {
+      setError("Failed to auto-map teams.");
+    } finally {
+      setAutoMapLoading(false);
+    }
+  }
+
   const rows = standings?.rows || [];
 
   const mappingMap = useMemo(() => {
@@ -111,7 +162,8 @@ export default function ExternalTeamMappingsPage() {
         <h1 className="page-title">External Team Mapping</h1>
         <p className="page-subtitle">
           Тут ми зв’язуємо зовнішні команди з football-data.org із твоїми
-          внутрішніми командами. Це база для наступного справжнього sync матчів.
+          внутрішніми командами. Можна мапити вручну, через safe auto-map
+          або прибрати неправильний зв’язок.
         </p>
       </div>
 
@@ -127,6 +179,15 @@ export default function ExternalTeamMappingsPage() {
             </option>
           ))}
         </select>
+
+        <button
+          type="button"
+          className="hero-button hero-button-primary"
+          onClick={handleAutoMap}
+          disabled={autoMapLoading || loading}
+        >
+          {autoMapLoading ? "Auto-mapping..." : "Auto-map teams"}
+        </button>
       </div>
 
       {message ? (
@@ -151,7 +212,7 @@ export default function ExternalTeamMappingsPage() {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1.2fr 1fr auto",
+                      gridTemplateColumns: "1.1fr 1fr auto auto",
                       gap: "14px",
                       alignItems: "center",
                     }}
@@ -201,6 +262,19 @@ export default function ExternalTeamMappingsPage() {
                     >
                       {saveLoadingId === row.teamId ? "Saving..." : "Save"}
                     </button>
+
+                    {existingMapping ? (
+                      <button
+                        type="button"
+                        className="hero-button hero-button-secondary"
+                        onClick={() => handleDelete(row)}
+                        disabled={deleteLoadingId === row.teamId}
+                      >
+                        {deleteLoadingId === row.teamId ? "Deleting..." : "Delete"}
+                      </button>
+                    ) : (
+                      <div />
+                    )}
                   </div>
                 </div>
               );

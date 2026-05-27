@@ -1,6 +1,7 @@
 package com.diplomna.sports_analytics_backend.controller;
 
 import com.diplomna.sports_analytics_backend.dto.request.ExternalTeamMappingRequest;
+import com.diplomna.sports_analytics_backend.dto.response.ExternalTeamAutoMapResultResponse;
 import com.diplomna.sports_analytics_backend.dto.response.ExternalTeamMappingResponse;
 import com.diplomna.sports_analytics_backend.service.ExternalTeamMappingService;
 import lombok.RequiredArgsConstructor;
@@ -25,5 +26,17 @@ public class ExternalTeamMappingController {
             @RequestBody ExternalTeamMappingRequest request
     ) {
         return externalTeamMappingService.saveMapping(request);
+    }
+
+    @PostMapping("/auto")
+    public ExternalTeamAutoMapResultResponse autoMapTeams(
+            @RequestParam String competitionCode
+    ) {
+        return externalTeamMappingService.autoMapTeamsByCompetition(competitionCode);
+    }
+
+    @DeleteMapping("/{externalTeamId}")
+    public void deleteMapping(@PathVariable Long externalTeamId) {
+        externalTeamMappingService.deleteMappingByExternalTeamId(externalTeamId);
     }
 }

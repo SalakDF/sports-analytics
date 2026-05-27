@@ -19,7 +19,7 @@ export default function MatchDetailsPage() {
   useEffect(() => {
     fetchJson(`/matches/${id}`)
       .then((data) => setMatch(data))
-      .catch(() => setError("Failed to load match details"))
+      .catch(() => setError("Failed to load match details."))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -38,16 +38,14 @@ export default function MatchDetailsPage() {
         );
         setIsFavorite(exists);
       })
-      .catch(() => {
-        setIsFavorite(false);
-      });
+      .catch(() => setIsFavorite(false));
   }, [id]);
 
-  const getStatusClass = (status) => {
+  function getStatusClass(status) {
     if (status === "LIVE") return "badge badge-live";
     if (status === "FINISHED") return "badge badge-finished";
     return "badge badge-scheduled";
-  };
+  }
 
   async function handleFavoriteAction() {
     const user = getCurrentUser();
@@ -87,11 +85,12 @@ export default function MatchDetailsPage() {
 
   return (
     <div>
-      <div className="detail-hero">
+      <section className="detail-hero">
         <div className="detail-hero-main">
-          <div className="detail-hero-top">
+          <div className="detail-hero-top-row">
             <span className="page-kicker">Match Center</span>
-            <div className="meta-row" style={{ marginTop: 0 }}>
+
+            <div className="meta-row">
               <span className={getStatusClass(match.status)}>{match.status}</span>
               <span className="badge">{match.roundName || "Round -"}</span>
               <span className="badge">{match.venue || "Venue -"}</span>
@@ -166,7 +165,7 @@ export default function MatchDetailsPage() {
             </div>
           ) : null}
         </div>
-      </div>
+      </section>
 
       <div className="grid grid-2" style={{ marginTop: "22px" }}>
         <div className="card detail-card">
@@ -175,9 +174,7 @@ export default function MatchDetailsPage() {
           <div className="detail-info-grid">
             <div className="detail-info-item">
               <span className="detail-info-label">Tournament</span>
-              <span className="detail-info-value">
-                {match.tournamentName || "-"}
-              </span>
+              <span className="detail-info-value">{match.tournamentName || "-"}</span>
             </div>
 
             <div className="detail-info-item">
@@ -201,8 +198,8 @@ export default function MatchDetailsPage() {
           <h2 className="section-title">Quick Navigation</h2>
 
           <p className="detail-paragraph">
-            Тут пізніше можна буде додати розширену статистику матчу, події гри,
-            форму команд, xG, shots, possession та інші аналітичні показники.
+            Тут пізніше можна буде додати події матчу, розширену статистику,
+            форму команд, володіння м’ячем, удари та інші аналітичні блоки.
           </p>
 
           <div className="detail-links-column">

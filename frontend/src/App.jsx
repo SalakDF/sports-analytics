@@ -15,6 +15,7 @@ import ExternalStandingsPage from "./pages/ExternalStandingsPage";
 import ExternalTeamMatchesPage from "./pages/ExternalTeamMatchesPage";
 import ImportedMatchesPage from "./pages/ImportedMatchesPage";
 import ExternalTeamMappingsPage from "./pages/ExternalTeamMappingsPage";
+import ExternalCompetitionMappingsPage from "./pages/ExternalCompetitionMappingsPage";
 import ExternalSyncPage from "./pages/ExternalSyncPage";
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="external-teams/:teamId/matches" element={<ExternalTeamMatchesPage />} />
         <Route path="imported-matches" element={<ImportedMatchesPage />} />
         <Route path="external-team-mappings" element={<ExternalTeamMappingsPage />} />
+        <Route path="external-competition-mappings" element={<ExternalCompetitionMappingsPage />} />
         <Route path="external-sync" element={<ExternalSyncPage />} />
         <Route
           path="favorites"

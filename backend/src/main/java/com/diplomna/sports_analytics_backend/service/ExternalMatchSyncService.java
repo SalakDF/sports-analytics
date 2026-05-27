@@ -21,6 +21,7 @@ public class ExternalMatchSyncService {
     private final ExternalImportService externalImportService;
     private final ExternalMatchCacheRepository externalMatchCacheRepository;
     private final ExternalTeamMappingRepository externalTeamMappingRepository;
+    private final ExternalCompetitionMappingRepository externalCompetitionMappingRepository;
     private final ExternalMatchSyncRepository externalMatchSyncRepository;
     private final SeasonRepository seasonRepository;
     private final TeamRepository teamRepository;
@@ -31,11 +32,19 @@ public class ExternalMatchSyncService {
             throw new RuntimeException("competitionCode is required");
         }
 
-        if (request.getSeasonId() == null) {
-            throw new RuntimeException("seasonId is required");
+        Long resolvedSeasonId = request.getSeasonId();
+
+        if (resolvedSeasonId == null) {
+            ExternalCompetitionMapping mapping = externalCompetitionMappingRepository
+                    .findByExternalCompetitionCode(request.getCompetitionCode())
+                    .orElseThrow(() -> new RuntimeException(
+                            "No competition mapping found for code: " + request.getCompetitionCode()
+                    ));
+
+            resolvedSeasonId = mapping.getInternalSeasonId();
         }
 
-        Season season = seasonRepository.findById(request.getSeasonId())
+        Season season = seasonRepository.findById(resolvedSeasonId)
                 .orElseThrow(() -> new RuntimeException("Season not found"));
 
         ImportResultResponse importResult =
@@ -126,7 +135,7 @@ public class ExternalMatchSyncService {
 
         return ExternalMatchSyncResultResponse.builder()
                 .competitionCode(request.getCompetitionCode())
-                .seasonId(request.getSeasonId())
+                .seasonId(resolvedSeasonId)
                 .refreshedExternalCount(importResult.getTotalCount())
                 .createdInternalCount(createdInternalCount)
                 .updatedInternalCount(updatedInternalCount)

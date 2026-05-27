@@ -1,9 +1,8 @@
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { clearCurrentUser, getCurrentUser } from "../../utils/session";
 
 export default function Header() {
   const navigate = useNavigate();
-  const location = useLocation();
   const currentUser = getCurrentUser();
 
   const getLinkClass = ({ isActive }) =>
@@ -36,26 +35,6 @@ export default function Header() {
             Standings
           </NavLink>
 
-          <NavLink to="/external-matches" className={getLinkClass}>
-            External Matches
-          </NavLink>
-
-          <NavLink to="/external-standings" className={getLinkClass}>
-            External Table
-          </NavLink>
-
-          <NavLink to="/imported-matches" className={getLinkClass}>
-            Imported
-          </NavLink>
-
-          <NavLink to="/external-team-mappings" className={getLinkClass}>
-            Team Mapping
-          </NavLink>
-
-          <NavLink to="/external-sync" className={getLinkClass}>
-            Sync
-          </NavLink>
-
           {currentUser?.id ? (
             <NavLink to="/favorites" className={getLinkClass}>
               Favorites
@@ -69,7 +48,7 @@ export default function Header() {
           ) : null}
         </nav>
 
-        <div className="header-user-block" key={location.pathname}>
+        <div className="header-user-block">
           {currentUser?.email ? (
             <>
               <span className="header-user-email">{currentUser.email}</span>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchJson, postJson } from "../api/client";
 
 const COMPETITIONS = [
@@ -12,8 +12,9 @@ const COMPETITIONS = [
 export default function ExternalSyncPage() {
   const [competitionCode, setCompetitionCode] = useState("PL");
   const [seasons, setSeasons] = useState([]);
-  const [seasonId, setSeasonId] = useState("");
   const [mappings, setMappings] = useState([]);
+  const [competitionMappings, setCompetitionMappings] = useState([]);
+  const [manualSeasonId, setManualSeasonId] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncLoading, setSyncLoading] = useState(false);
   const [error, setError] = useState("");
@@ -28,16 +29,19 @@ export default function ExternalSyncPage() {
     setError("");
 
     try {
-      const [seasonsData, mappingsData] = await Promise.all([
-        fetchJson("/seasons"),
-        fetchJson("/external/football/team-mappings"),
-      ]);
+      const [seasonsData, mappingsData, competitionMappingsData] =
+        await Promise.all([
+          fetchJson("/seasons"),
+          fetchJson("/external/football/team-mappings"),
+          fetchJson("/external/football/competition-mappings"),
+        ]);
 
       setSeasons(seasonsData);
       setMappings(mappingsData);
+      setCompetitionMappings(competitionMappingsData);
 
       if (seasonsData.length > 0) {
-        setSeasonId(String(seasonsData[0].id));
+        setManualSeasonId(String(seasonsData[0].id));
       }
     } catch {
       setError("Failed to load sync data.");
@@ -46,24 +50,40 @@ export default function ExternalSyncPage() {
     }
   }
 
-  async function handleSync() {
-    if (!seasonId) {
-      setError("Please select season first.");
-      return;
-    }
+  const selectedCompetitionMapping = useMemo(() => {
+    return competitionMappings.find(
+      (item) =>
+        String(item.externalCompetitionCode) === String(competitionCode)
+    );
+  }, [competitionMappings, competitionCode]);
 
+  const selectedSeason = useMemo(() => {
+    const resolvedSeasonId =
+      selectedCompetitionMapping?.internalSeasonId || manualSeasonId;
+
+    return seasons.find(
+      (item) => String(item.id) === String(resolvedSeasonId)
+    );
+  }, [seasons, manualSeasonId, selectedCompetitionMapping]);
+
+  async function handleSync() {
     setSyncLoading(true);
     setError("");
     setMessage("");
 
     try {
-      const result = await postJson("/external/football/sync-matches", {
+      const payload = {
         competitionCode,
-        seasonId: Number(seasonId),
-      });
+      };
+
+      if (!selectedCompetitionMapping && manualSeasonId) {
+        payload.seasonId = Number(manualSeasonId);
+      }
+
+      const result = await postJson("/external/football/sync-matches", payload);
 
       setMessage(
-        `Sync completed. External refreshed: ${result.refreshedExternalCount}, created internal: ${result.createdInternalCount}, updated internal: ${result.updatedInternalCount}, skipped: ${result.skippedCount}.`
+        `Sync completed. External refreshed: ${result.refreshedExternalCount}, created internal: ${result.createdInternalCount}, updated internal: ${result.updatedInternalCount}, skipped: ${result.skippedCount}. Resolved seasonId: ${result.seasonId}.`
       );
     } catch {
       setError("Failed to sync external matches into internal Match table.");
@@ -72,42 +92,53 @@ export default function ExternalSyncPage() {
     }
   }
 
-  const selectedSeason = seasons.find(
-    (item) => String(item.id) === String(seasonId)
-  );
-
   return (
     <div>
       <div className="page-header">
         <span className="page-kicker">Real Sync</span>
         <h1 className="page-title">External Match Sync</h1>
         <p className="page-subtitle">
-          Імпорт і синхронізація зовнішніх матчів у внутрішню таблицю Match
-          через external cache, team mappings і вибраний сезон.
+          Імпорт і синхронізація зовнішніх матчів у внутрішню таблицю Match.
+          Якщо для ліги є competition mapping, сезон підставляється автоматично.
         </p>
       </div>
 
       <div className="grid grid-3" style={{ marginBottom: "22px" }}>
         <div className="card">
           <h3 className="card-title">Mapped teams</h3>
-          <p className="card-muted">Кількість зовнішніх команд, які вже зв’язані з внутрішніми.</p>
-          <div className="hero-panel-value" style={{ fontSize: "30px", marginBottom: 0 }}>
+          <p className="card-muted">
+            Кількість зовнішніх команд, які вже зв’язані з внутрішніми.
+          </p>
+          <div
+            className="hero-panel-value"
+            style={{ fontSize: "30px", marginBottom: 0 }}
+          >
             {mappings.length}
           </div>
         </div>
 
         <div className="card">
-          <h3 className="card-title">Selected competition</h3>
-          <p className="card-muted">Ліга, яку зараз будеш синхронізувати.</p>
-          <div className="hero-panel-value" style={{ fontSize: "30px", marginBottom: 0 }}>
-            {competitionCode}
+          <h3 className="card-title">Competition mapping</h3>
+          <p className="card-muted">
+            Чи має поточна ліга автоматичний зв’язок із внутрішнім сезоном.
+          </p>
+          <div
+            className="hero-panel-value"
+            style={{ fontSize: "24px", marginBottom: 0 }}
+          >
+            {selectedCompetitionMapping ? "Mapped" : "Manual"}
           </div>
         </div>
 
         <div className="card">
           <h3 className="card-title">Target season</h3>
-          <p className="card-muted">Внутрішній сезон, куди будуть записані матчі.</p>
-          <div className="hero-panel-value" style={{ fontSize: "20px", marginBottom: 0 }}>
+          <p className="card-muted">
+            Внутрішній сезон, у який будуть записані матчі.
+          </p>
+          <div
+            className="hero-panel-value"
+            style={{ fontSize: "20px", marginBottom: 0 }}
+          >
             {selectedSeason
               ? selectedSeason.tournamentName
                 ? `${selectedSeason.tournamentName} • ${selectedSeason.name}`
@@ -132,8 +163,9 @@ export default function ExternalSyncPage() {
 
         <select
           className="filter-select"
-          value={seasonId}
-          onChange={(event) => setSeasonId(event.target.value)}
+          value={manualSeasonId}
+          onChange={(event) => setManualSeasonId(event.target.value)}
+          disabled={Boolean(selectedCompetitionMapping)}
         >
           {!seasons.length ? (
             <option value="">No seasons</option>
@@ -157,6 +189,17 @@ export default function ExternalSyncPage() {
           {syncLoading ? "Syncing..." : "Import + Sync"}
         </button>
       </div>
+
+      {selectedCompetitionMapping ? (
+        <div className="loading-state" style={{ marginTop: "18px" }}>
+          Auto mapping active: {selectedCompetitionMapping.externalCompetitionName} →{" "}
+          {selectedCompetitionMapping.internalSeasonName}
+        </div>
+      ) : (
+        <div className="loading-state" style={{ marginTop: "18px" }}>
+          No competition mapping found. Manual season selection will be used.
+        </div>
+      )}
 
       {loading ? <div className="loading-state">Loading sync page...</div> : null}
 

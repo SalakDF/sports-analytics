@@ -41,7 +41,8 @@ export default function TeamsPage() {
         <span className="page-kicker">Clubs</span>
         <h1 className="page-title">Teams</h1>
         <p className="page-subtitle">
-          Перегляд команд із пошуком через backend API.
+          Перегляд команд із пошуком через backend API, короткою інформацією і
+          переходом до детальної сторінки.
         </p>
       </div>
 
@@ -60,15 +61,15 @@ export default function TeamsPage() {
 
       {!loading && !error ? (
         <>
-          <p className="results-count">Found: {teams.length}</p>
+          <p className="results-count">Found teams: {teams.length}</p>
 
           {!teams.length ? (
             <div className="empty-state">No teams found.</div>
           ) : (
             <div className="grid grid-2">
               {teams.map((team) => (
-                <div className="card" key={team.id}>
-                  <div className="team-inline" style={{ marginBottom: "14px" }}>
+                <div className="card team-list-card" key={team.id}>
+                  <div className="team-inline team-list-card-top">
                     <TeamLogo
                       name={team.name}
                       shortName={team.shortName}
@@ -90,9 +91,10 @@ export default function TeamsPage() {
                     <span className="badge">
                       Founded: {team.foundedYear || "-"}
                     </span>
+                    {team.country ? <span className="badge">{team.country}</span> : null}
                   </div>
 
-                  <p className="card-muted" style={{ marginTop: "14px" }}>
+                  <p className="card-muted team-description-preview">
                     {team.description || "No description available."}
                   </p>
 

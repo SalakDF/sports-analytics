@@ -21,7 +21,7 @@ export default function TeamDetailsPage() {
   useEffect(() => {
     fetchJson(`/teams/${id}`)
       .then((data) => setTeam(data))
-      .catch(() => setError("Failed to load team details"))
+      .catch(() => setError("Failed to load team details."))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -47,9 +47,7 @@ export default function TeamDetailsPage() {
         );
         setIsFavorite(exists);
       })
-      .catch(() => {
-        setIsFavorite(false);
-      });
+      .catch(() => setIsFavorite(false));
   }, [id]);
 
   async function handleFavoriteAction() {
@@ -108,20 +106,15 @@ export default function TeamDetailsPage() {
 
   return (
     <div>
-      <div className="detail-hero">
+      <section className="detail-hero">
         <div className="detail-hero-main">
-          <div className="detail-hero-top">
+          <div className="detail-hero-top-row">
             <span className="page-kicker">Club Profile</span>
-            <div className="meta-row" style={{ marginTop: 0 }}>
-              <span className="badge">
-                {team.country ? `Country: ${team.country}` : "Country: -"}
-              </span>
-              <span className="badge">
-                Founded: {team.foundedYear || "-"}
-              </span>
-              <span className="badge">
-                {team.shortName ? `Code: ${team.shortName}` : "Code: -"}
-              </span>
+
+            <div className="meta-row">
+              <span className="badge">{team.country || "Country -"}</span>
+              <span className="badge">Founded: {team.foundedYear || "-"}</span>
+              <span className="badge">{team.shortName || "No short name"}</span>
             </div>
           </div>
 
@@ -136,8 +129,8 @@ export default function TeamDetailsPage() {
             <div className="detail-hero-brand-text">
               <h1 className="detail-title">{team.name}</h1>
               <p className="detail-subtitle">
-                Детальна сторінка команди з основною інформацією, коротким
-                описом, recent form та можливістю додати клуб до favorites.
+                Детальна інформація про команду, короткий опис, recent form та
+                керування favorites.
               </p>
             </div>
           </div>
@@ -177,7 +170,7 @@ export default function TeamDetailsPage() {
             </div>
           ) : null}
         </div>
-      </div>
+      </section>
 
       <div className="grid grid-2" style={{ marginTop: "22px" }}>
         <div className="card detail-card">
@@ -200,7 +193,7 @@ export default function TeamDetailsPage() {
             </div>
 
             <div className="detail-info-item">
-              <span className="detail-info-label">Founded</span>
+              <span className="detail-info-label">Founded year</span>
               <span className="detail-info-value">{team.foundedYear || "-"}</span>
             </div>
           </div>
@@ -208,7 +201,6 @@ export default function TeamDetailsPage() {
 
         <div className="card detail-card">
           <h2 className="section-title">Description</h2>
-
           <p className="detail-paragraph">
             {team.description || "No description available for this team yet."}
           </p>
