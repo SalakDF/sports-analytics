@@ -52,6 +52,10 @@ export default function Header() {
             Team Mapping
           </NavLink>
 
+          <NavLink to="/external-sync" className={getLinkClass}>
+            Sync
+          </NavLink>
+
           {currentUser?.id ? (
             <NavLink to="/favorites" className={getLinkClass}>
               Favorites
