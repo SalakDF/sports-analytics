@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchJson, postJson } from "../api/client";
+import { fetchJson, postJson, postRequest } from "../api/client";
 
 const COMPETITIONS = [
   { code: "PL", label: "Premier League" },
@@ -17,6 +17,7 @@ export default function ExternalSyncPage() {
   const [manualSeasonId, setManualSeasonId] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncLoading, setSyncLoading] = useState(false);
+  const [fullSyncLoading, setFullSyncLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -52,8 +53,7 @@ export default function ExternalSyncPage() {
 
   const selectedCompetitionMapping = useMemo(() => {
     return competitionMappings.find(
-      (item) =>
-        String(item.externalCompetitionCode) === String(competitionCode)
+      (item) => String(item.externalCompetitionCode) === String(competitionCode)
     );
   }, [competitionMappings, competitionCode]);
 
@@ -61,9 +61,7 @@ export default function ExternalSyncPage() {
     const resolvedSeasonId =
       selectedCompetitionMapping?.internalSeasonId || manualSeasonId;
 
-    return seasons.find(
-      (item) => String(item.id) === String(resolvedSeasonId)
-    );
+    return seasons.find((item) => String(item.id) === String(resolvedSeasonId));
   }, [seasons, manualSeasonId, selectedCompetitionMapping]);
 
   async function handleSync() {
@@ -83,12 +81,48 @@ export default function ExternalSyncPage() {
       const result = await postJson("/external/football/sync-matches", payload);
 
       setMessage(
-        `Sync completed. External refreshed: ${result.refreshedExternalCount}, created internal: ${result.createdInternalCount}, updated internal: ${result.updatedInternalCount}, skipped: ${result.skippedCount}. Resolved seasonId: ${result.seasonId}.`
+        `Sync completed. External refreshed: ${result.refreshedExternalCount}, created internal: ${result.createdInternalCount}, updated internal: ${result.updatedInternalCount}, skipped: ${result.skippedCount}, seasonId: ${result.seasonId}.`
       );
     } catch {
       setError("Failed to sync external matches into internal Match table.");
     } finally {
       setSyncLoading(false);
+    }
+  }
+
+  async function handleFullSync() {
+    setFullSyncLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const importTeamsResult = await postRequest(
+        `/external/football/competitions/${competitionCode}/import-teams`
+      );
+
+      const autoMapResult = await postRequest(
+        `/external/football/team-mappings/auto?competitionCode=${competitionCode}`
+      );
+
+      const payload = {
+        competitionCode,
+      };
+
+      if (!selectedCompetitionMapping && manualSeasonId) {
+        payload.seasonId = Number(manualSeasonId);
+      }
+
+      const syncResult = await postJson("/external/football/sync-matches", payload);
+
+      setMessage(
+        `Full sync completed. Teams imported: ${importTeamsResult.createdTeams}, already existing teams: ${importTeamsResult.alreadyExistingTeams}. Auto-mapped: ${autoMapResult.mappedCount}, already mapped: ${autoMapResult.alreadyMappedCount}, skipped mapping: ${autoMapResult.skippedCount}. Matches synced: created ${syncResult.createdInternalCount}, updated ${syncResult.updatedInternalCount}, skipped ${syncResult.skippedCount}.`
+      );
+
+      await loadData();
+    } catch {
+      setError("Failed to run full sync pipeline.");
+    } finally {
+      setFullSyncLoading(false);
     }
   }
 
@@ -99,7 +133,7 @@ export default function ExternalSyncPage() {
         <h1 className="page-title">External Match Sync</h1>
         <p className="page-subtitle">
           Імпорт і синхронізація зовнішніх матчів у внутрішню таблицю Match.
-          Якщо для ліги є competition mapping, сезон підставляється автоматично.
+          Можна запускати звичайний sync або повний pipeline в один клік.
         </p>
       </div>
 
@@ -163,7 +197,11 @@ export default function ExternalSyncPage() {
 
         <select
           className="filter-select"
-          value={manualSeasonId}
+          value={
+            selectedCompetitionMapping
+              ? String(selectedCompetitionMapping.internalSeasonId)
+              : manualSeasonId
+          }
           onChange={(event) => setManualSeasonId(event.target.value)}
           disabled={Boolean(selectedCompetitionMapping)}
         >
@@ -182,11 +220,20 @@ export default function ExternalSyncPage() {
 
         <button
           type="button"
-          className="hero-button hero-button-primary"
+          className="hero-button hero-button-secondary"
           onClick={handleSync}
-          disabled={syncLoading || loading}
+          disabled={syncLoading || loading || fullSyncLoading}
         >
           {syncLoading ? "Syncing..." : "Import + Sync"}
+        </button>
+
+        <button
+          type="button"
+          className="hero-button hero-button-primary"
+          onClick={handleFullSync}
+          disabled={fullSyncLoading || loading || syncLoading}
+        >
+          {fullSyncLoading ? "Running full sync..." : "Full sync pipeline"}
         </button>
       </div>
 

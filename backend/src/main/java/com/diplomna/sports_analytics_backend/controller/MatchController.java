@@ -27,4 +27,9 @@ public class MatchController {
     public MatchResponse getMatchById(@PathVariable Long id) {
         return matchService.getMatchById(id);
     }
+
+    @GetMapping("/{id}/head-to-head")
+    public List<MatchResponse> getHeadToHead(@PathVariable Long id) {
+        return matchService.getHeadToHeadByMatchId(id);
+    }
 }

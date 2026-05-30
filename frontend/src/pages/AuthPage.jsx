@@ -47,12 +47,22 @@ export default function AuthPage() {
         <span className="page-kicker">Account</span>
         <h1 className="page-title">Authentication</h1>
         <p className="page-subtitle">
-          Увійди в систему або створи акаунт, щоб працювати з обраним.
+          Увійди в систему або створи акаунт, щоб працювати з favorites і
+          персональним сценарієм користування.
         </p>
       </div>
 
-      <div className="auth-layout">
-        <div className="card auth-card">
+      <div className="auth-layout auth-layout-premium">
+        <div className="card auth-card auth-card-premium">
+          <div className="auth-card-top">
+            <span className="page-kicker">
+              {mode === "login" ? "Welcome back" : "Create account"}
+            </span>
+            <h2 className="section-title" style={{ margin: 0 }}>
+              {mode === "login" ? "Sign in to continue" : "Start using the platform"}
+            </h2>
+          </div>
+
           <div className="auth-switcher">
             <button
               type="button"
@@ -126,28 +136,28 @@ export default function AuthPage() {
           ) : null}
         </div>
 
-        <div className="card auth-info-card">
+        <div className="card auth-info-card auth-info-card-premium">
           <h2 className="section-title">What you get</h2>
 
           <div className="grid" style={{ gap: "12px" }}>
-            <div className="mini-info-card">
+            <div className="mini-info-card auth-feature-card">
               <div className="mini-info-title">Favorites</div>
               <div className="mini-info-text">
-                Збереження улюблених команд і матчів.
+                Збереження улюблених команд і матчів у власному профілі.
               </div>
             </div>
 
-            <div className="mini-info-card">
+            <div className="mini-info-card auth-feature-card">
               <div className="mini-info-title">Quick access</div>
               <div className="mini-info-text">
-                Швидкий перехід до обраного прямо з меню.
+                Швидкий доступ до обраного прямо з основного меню.
               </div>
             </div>
 
-            <div className="mini-info-card">
-              <div className="mini-info-title">MVP flow</div>
+            <div className="mini-info-card auth-feature-card">
+              <div className="mini-info-title">Personal flow</div>
               <div className="mini-info-text">
-                Проста базова авторизація для дипломного проєкту.
+                Авторизація дає персоналізований сценарій користування системою.
               </div>
             </div>
           </div>

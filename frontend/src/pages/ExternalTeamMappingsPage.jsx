@@ -20,6 +20,7 @@ export default function ExternalTeamMappingsPage() {
   const [saveLoadingId, setSaveLoadingId] = useState(null);
   const [deleteLoadingId, setDeleteLoadingId] = useState(null);
   const [autoMapLoading, setAutoMapLoading] = useState(false);
+  const [importTeamsLoading, setImportTeamsLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -145,6 +146,28 @@ export default function ExternalTeamMappingsPage() {
     }
   }
 
+  async function handleImportTeams() {
+    setImportTeamsLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const result = await postRequest(
+        `/external/football/competitions/${competitionCode}/import-teams`
+      );
+
+      setMessage(
+        `Teams import completed. External teams: ${result.totalExternalTeams}, created internal teams: ${result.createdTeams}, already existing: ${result.alreadyExistingTeams}.`
+      );
+
+      await loadPageData();
+    } catch {
+      setError("Failed to import missing teams.");
+    } finally {
+      setImportTeamsLoading(false);
+    }
+  }
+
   const rows = standings?.rows || [];
 
   const mappingMap = useMemo(() => {
@@ -162,8 +185,8 @@ export default function ExternalTeamMappingsPage() {
         <h1 className="page-title">External Team Mapping</h1>
         <p className="page-subtitle">
           Тут ми зв’язуємо зовнішні команди з football-data.org із твоїми
-          внутрішніми командами. Можна мапити вручну, через safe auto-map
-          або прибрати неправильний зв’язок.
+          внутрішніми командами. Можна імпортувати відсутні, мапити вручну,
+          через safe auto-map або прибрати неправильний зв’язок.
         </p>
       </div>
 
@@ -179,6 +202,15 @@ export default function ExternalTeamMappingsPage() {
             </option>
           ))}
         </select>
+
+        <button
+          type="button"
+          className="hero-button hero-button-secondary"
+          onClick={handleImportTeams}
+          disabled={importTeamsLoading || loading}
+        >
+          {importTeamsLoading ? "Importing teams..." : "Import missing teams"}
+        </button>
 
         <button
           type="button"

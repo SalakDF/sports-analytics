@@ -56,4 +56,30 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
             order by m.scheduledAt desc
             """)
     List<Match> findRecentFinishedMatchesByTeamId(@Param("teamId") Long teamId);
+
+    @Query("""
+            select m
+            from Match m
+            where (m.homeTeam.id = :teamId or m.awayTeam.id = :teamId)
+              and m.status = com.diplomna.sports_analytics_backend.entity.MatchStatus.FINISHED
+            order by m.scheduledAt desc
+            """)
+    List<Match> findFinishedMatchesByTeamId(@Param("teamId") Long teamId);
+
+    @Query("""
+            select m
+            from Match m
+            where (
+                    (m.homeTeam.id = :homeTeamId and m.awayTeam.id = :awayTeamId)
+                 or (m.homeTeam.id = :awayTeamId and m.awayTeam.id = :homeTeamId)
+            )
+              and m.status = com.diplomna.sports_analytics_backend.entity.MatchStatus.FINISHED
+            order by m.scheduledAt desc
+            """)
+    List<Match> findHeadToHeadFinishedMatches(
+            @Param("homeTeamId") Long homeTeamId,
+            @Param("awayTeamId") Long awayTeamId
+    );
+
+    List<Match> findBySeasonIdOrderByScheduledAtAsc(Long seasonId);
 }

@@ -8,8 +8,10 @@ export default function TeamDetailsPage() {
   const { id } = useParams();
 
   const [team, setTeam] = useState(null);
+  const [stats, setStats] = useState(null);
   const [recentMatches, setRecentMatches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [recentLoading, setRecentLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -23,6 +25,13 @@ export default function TeamDetailsPage() {
       .then((data) => setTeam(data))
       .catch(() => setError("Failed to load team details."))
       .finally(() => setLoading(false));
+  }, [id]);
+
+  useEffect(() => {
+    fetchJson(`/teams/${id}/stats`)
+      .then((data) => setStats(data))
+      .catch(() => setStats(null))
+      .finally(() => setStatsLoading(false));
   }, [id]);
 
   useEffect(() => {
@@ -100,6 +109,80 @@ export default function TeamDetailsPage() {
     });
   }, [recentMatches, id]);
 
+  const formChartData = useMemo(() => {
+    return [...recentForm]
+      .slice(0, 5)
+      .reverse()
+      .map((match, index) => {
+        const isHome = String(match.homeTeamId) === String(id);
+        const goalsFor = isHome ? (match.homeScore ?? 0) : (match.awayScore ?? 0);
+        const goalsAgainst = isHome ? (match.awayScore ?? 0) : (match.homeScore ?? 0);
+
+        const points =
+          match.result === "W" ? 3 : match.result === "D" ? 1 : 0;
+
+        return {
+          id: match.id,
+          label: `M${index + 1}`,
+          opponentName: match.opponentName,
+          result: match.result,
+          points,
+          goalsFor,
+          goalsAgainst,
+        };
+      });
+  }, [recentForm, id]);
+
+  const lineChartPoints = useMemo(() => {
+    if (!formChartData.length) return "";
+
+    const width = 320;
+    const height = 120;
+
+    return formChartData
+      .map((item, index) => {
+        const x =
+          formChartData.length === 1
+            ? width / 2
+            : (index / (formChartData.length - 1)) * width;
+
+        const y = height - (item.points / 3) * height;
+        return `${x},${y}`;
+      })
+      .join(" ");
+  }, [formChartData]);
+
+  const pointMarkers = useMemo(() => {
+    if (!formChartData.length) return [];
+
+    const width = 320;
+    const height = 120;
+
+    return formChartData.map((item, index) => {
+      const x =
+        formChartData.length === 1
+          ? width / 2
+          : (index / (formChartData.length - 1)) * width;
+
+      const y = height - (item.points / 3) * height;
+
+      return {
+        ...item,
+        x,
+        y,
+      };
+    });
+  }, [formChartData]);
+
+  const maxGoalsValue = useMemo(() => {
+    if (!formChartData.length) return 1;
+
+    return Math.max(
+      1,
+      ...formChartData.flatMap((item) => [item.goalsFor, item.goalsAgainst])
+    );
+  }, [formChartData]);
+
   if (loading) return <div className="loading-state">Loading team details...</div>;
   if (error) return <div className="error-state">{error}</div>;
   if (!team) return <div className="empty-state">Team not found.</div>;
@@ -129,7 +212,7 @@ export default function TeamDetailsPage() {
             <div className="detail-hero-brand-text">
               <h1 className="detail-title">{team.name}</h1>
               <p className="detail-subtitle">
-                Детальна інформація про команду, короткий опис, recent form та
+                Детальна інформація про команду, статистика, recent form та
                 керування favorites.
               </p>
             </div>
@@ -205,6 +288,181 @@ export default function TeamDetailsPage() {
             {team.description || "No description available for this team yet."}
           </p>
         </div>
+      </div>
+
+      <div className="card detail-card" style={{ marginTop: "22px" }}>
+        <h2 className="section-title">Team Statistics</h2>
+
+        {statsLoading ? (
+          <div className="loading-state">Loading team stats...</div>
+        ) : !stats ? (
+          <div className="empty-state">No team stats available.</div>
+        ) : (
+          <div className="detail-info-grid">
+            <div className="detail-info-item">
+              <span className="detail-info-label">Matches played</span>
+              <span className="detail-info-value">{stats.matchesPlayed}</span>
+            </div>
+
+            <div className="detail-info-item">
+              <span className="detail-info-label">Wins</span>
+              <span className="detail-info-value">{stats.wins}</span>
+            </div>
+
+            <div className="detail-info-item">
+              <span className="detail-info-label">Draws</span>
+              <span className="detail-info-value">{stats.draws}</span>
+            </div>
+
+            <div className="detail-info-item">
+              <span className="detail-info-label">Losses</span>
+              <span className="detail-info-value">{stats.losses}</span>
+            </div>
+
+            <div className="detail-info-item">
+              <span className="detail-info-label">Goals scored</span>
+              <span className="detail-info-value">{stats.goalsFor}</span>
+            </div>
+
+            <div className="detail-info-item">
+              <span className="detail-info-label">Goals conceded</span>
+              <span className="detail-info-value">{stats.goalsAgainst}</span>
+            </div>
+
+            <div className="detail-info-item">
+              <span className="detail-info-label">Goal difference</span>
+              <span className="detail-info-value">{stats.goalDifference}</span>
+            </div>
+
+            <div className="detail-info-item">
+              <span className="detail-info-label">Win rate</span>
+              <span className="detail-info-value">{stats.winRate}%</span>
+            </div>
+
+            <div className="detail-info-item">
+              <span className="detail-info-label">Avg goals scored</span>
+              <span className="detail-info-value">{stats.averageGoalsFor}</span>
+            </div>
+
+            <div className="detail-info-item">
+              <span className="detail-info-label">Avg goals conceded</span>
+              <span className="detail-info-value">{stats.averageGoalsAgainst}</span>
+            </div>
+
+            <div className="detail-info-item">
+              <span className="detail-info-label">Clean sheets</span>
+              <span className="detail-info-value">{stats.cleanSheets}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="card detail-card" style={{ marginTop: "22px" }}>
+        <h2 className="section-title">Form Chart</h2>
+
+        {recentLoading ? (
+          <div className="loading-state">Loading form chart...</div>
+        ) : !formChartData.length ? (
+          <div className="empty-state">Not enough recent matches for chart.</div>
+        ) : (
+          <div className="team-form-chart-layout">
+            <div className="team-form-line-card">
+              <div className="mini-info-title" style={{ marginBottom: "10px" }}>
+                Points by last 5 matches
+              </div>
+
+              <div className="team-form-line-wrap">
+                <div className="team-form-y-axis">
+                  <span>3</span>
+                  <span>2</span>
+                  <span>1</span>
+                  <span>0</span>
+                </div>
+
+                <div className="team-form-svg-wrap">
+                  <svg
+                    viewBox="0 0 320 120"
+                    className="team-form-line-svg"
+                    preserveAspectRatio="none"
+                  >
+                    <line x1="0" y1="0" x2="320" y2="0" className="chart-grid-line" />
+                    <line x1="0" y1="40" x2="320" y2="40" className="chart-grid-line" />
+                    <line x1="0" y1="80" x2="320" y2="80" className="chart-grid-line" />
+                    <line x1="0" y1="120" x2="320" y2="120" className="chart-grid-line" />
+
+                    <polyline
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      points={lineChartPoints}
+                      className="team-form-polyline"
+                    />
+
+                    {pointMarkers.map((item) => (
+                      <circle
+                        key={item.id}
+                        cx={item.x}
+                        cy={item.y}
+                        r="5"
+                        className={`team-form-point team-form-point-${item.result.toLowerCase()}`}
+                      />
+                    ))}
+                  </svg>
+
+                  <div className="team-form-x-axis">
+                    {formChartData.map((item) => (
+                      <div key={item.id} className="team-form-x-item">
+                        <span>{item.label}</span>
+                        <small>{item.result}</small>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="team-form-bars-card">
+              <div className="mini-info-title" style={{ marginBottom: "10px" }}>
+                Goals scored vs conceded
+              </div>
+
+              <div className="team-goals-bars">
+                {formChartData.map((item) => (
+                  <div key={item.id} className="team-goals-bar-row">
+                    <div className="team-goals-bar-label">
+                      <span>{item.label}</span>
+                      <small>vs {item.opponentName}</small>
+                    </div>
+
+                    <div className="team-goals-bar-pair">
+                      <div className="team-goals-bar-track">
+                        <div
+                          className="team-goals-bar team-goals-bar-for"
+                          style={{
+                            width: `${(item.goalsFor / maxGoalsValue) * 100}%`,
+                          }}
+                        />
+                      </div>
+
+                      <span className="team-goals-bar-value">{item.goalsFor}</span>
+
+                      <div className="team-goals-bar-track">
+                        <div
+                          className="team-goals-bar team-goals-bar-against"
+                          style={{
+                            width: `${(item.goalsAgainst / maxGoalsValue) * 100}%`,
+                          }}
+                        />
+                      </div>
+
+                      <span className="team-goals-bar-value">{item.goalsAgainst}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="card detail-card" style={{ marginTop: "22px" }}>

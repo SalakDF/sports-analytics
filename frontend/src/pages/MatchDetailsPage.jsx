@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiRequest, fetchJson } from "../api/client";
 import { getCurrentUser } from "../utils/session";
@@ -11,6 +11,15 @@ export default function MatchDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [homeRecentMatches, setHomeRecentMatches] = useState([]);
+  const [awayRecentMatches, setAwayRecentMatches] = useState([]);
+  const [headToHeadMatches, setHeadToHeadMatches] = useState([]);
+  const [homeStats, setHomeStats] = useState(null);
+  const [awayStats, setAwayStats] = useState(null);
+  const [recentLoading, setRecentLoading] = useState(true);
+  const [headToHeadLoading, setHeadToHeadLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
+
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [favoriteMessage, setFavoriteMessage] = useState("");
@@ -22,6 +31,34 @@ export default function MatchDetailsPage() {
       .catch(() => setError("Failed to load match details."))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!match?.homeTeamId || !match?.awayTeamId) return;
+
+    setRecentLoading(true);
+    setHeadToHeadLoading(true);
+    setStatsLoading(true);
+
+    Promise.all([
+      fetchJson(`/teams/${match.homeTeamId}/recent-matches`).catch(() => []),
+      fetchJson(`/teams/${match.awayTeamId}/recent-matches`).catch(() => []),
+      fetchJson(`/matches/${id}/head-to-head`).catch(() => []),
+      fetchJson(`/teams/${match.homeTeamId}/stats`).catch(() => null),
+      fetchJson(`/teams/${match.awayTeamId}/stats`).catch(() => null),
+    ])
+      .then(([homeData, awayData, h2hData, homeStatsData, awayStatsData]) => {
+        setHomeRecentMatches(homeData);
+        setAwayRecentMatches(awayData);
+        setHeadToHeadMatches(h2hData);
+        setHomeStats(homeStatsData);
+        setAwayStats(awayStatsData);
+      })
+      .finally(() => {
+        setRecentLoading(false);
+        setHeadToHeadLoading(false);
+        setStatsLoading(false);
+      });
+  }, [id, match?.homeTeamId, match?.awayTeamId]);
 
   useEffect(() => {
     const user = getCurrentUser();
@@ -78,6 +115,87 @@ export default function MatchDetailsPage() {
       setFavoriteLoading(false);
     }
   }
+
+  function buildRecentForm(matches, teamId) {
+    return matches.slice(0, 5).map((item) => {
+      const isHome = String(item.homeTeamId) === String(teamId);
+      const teamScore = isHome ? item.homeScore : item.awayScore;
+      const opponentScore = isHome ? item.awayScore : item.homeScore;
+
+      let result = "D";
+      if (teamScore > opponentScore) result = "W";
+      if (teamScore < opponentScore) result = "L";
+
+      return {
+        ...item,
+        result,
+        opponentName: isHome ? item.awayTeamName : item.homeTeamName,
+      };
+    });
+  }
+
+  const homeForm = useMemo(
+    () => buildRecentForm(homeRecentMatches, match?.homeTeamId),
+    [homeRecentMatches, match?.homeTeamId]
+  );
+
+  const awayForm = useMemo(
+    () => buildRecentForm(awayRecentMatches, match?.awayTeamId),
+    [awayRecentMatches, match?.awayTeamId]
+  );
+
+  const headToHeadSummary = useMemo(() => {
+    if (!match) return { homeWins: 0, awayWins: 0, draws: 0 };
+
+    let homeWins = 0;
+    let awayWins = 0;
+    let draws = 0;
+
+    for (const item of headToHeadMatches) {
+      const homeTeamIsCurrentHome =
+        String(item.homeTeamId) === String(match.homeTeamId);
+
+      const currentHomeScore = homeTeamIsCurrentHome
+        ? item.homeScore
+        : item.awayScore;
+
+      const currentAwayScore = homeTeamIsCurrentHome
+        ? item.awayScore
+        : item.homeScore;
+
+      if (currentHomeScore > currentAwayScore) homeWins++;
+      else if (currentHomeScore < currentAwayScore) awayWins++;
+      else draws++;
+    }
+
+    return { homeWins, awayWins, draws };
+  }, [headToHeadMatches, match]);
+
+  const insightText = useMemo(() => {
+    if (!homeStats || !awayStats || !match) return "Comparison is not available yet.";
+
+    const homePower =
+      (homeStats.winRate || 0) +
+      (homeStats.averageGoalsFor || 0) * 10 +
+      (homeStats.goalDifference || 0);
+
+    const awayPower =
+      (awayStats.winRate || 0) +
+      (awayStats.averageGoalsFor || 0) * 10 +
+      (awayStats.goalDifference || 0);
+
+    const diff = homePower - awayPower;
+
+    if (Math.abs(diff) < 5) {
+      return `The matchup between ${match.homeTeamName} and ${match.awayTeamName} looks balanced based on current internal team stats.`;
+    }
+
+    if (diff > 0) {
+      return `${match.homeTeamName} has a slight statistical edge by win rate, scoring profile and goal difference.`;
+    }
+
+    return `${match.awayTeamName} has a slight statistical edge by win rate, scoring profile and goal difference.`;
+  }, [homeStats, awayStats, match]);
 
   if (loading) return <div className="loading-state">Loading match details...</div>;
   if (error) return <div className="error-state">{error}</div>;
@@ -197,10 +315,7 @@ export default function MatchDetailsPage() {
         <div className="card detail-card">
           <h2 className="section-title">Quick Navigation</h2>
 
-          <p className="detail-paragraph">
-            Тут пізніше можна буде додати події матчу, розширену статистику,
-            форму команд, володіння м’ячем, удари та інші аналітичні блоки.
-          </p>
+          <p className="detail-paragraph">{insightText}</p>
 
           <div className="detail-links-column">
             <Link className="action-link" to={`/teams/${match.homeTeamId}`}>
@@ -213,6 +328,194 @@ export default function MatchDetailsPage() {
               ← Back to matches
             </Link>
           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-3" style={{ marginTop: "22px" }}>
+        <div className="card stat-card">
+          <div className="stat-card-top">
+            <span className="page-kicker">{match.homeTeamName}</span>
+          </div>
+          <div className="standings-summary-value">{headToHeadSummary.homeWins}</div>
+          <p className="card-muted">Wins in recent head-to-head meetings.</p>
+        </div>
+
+        <div className="card stat-card">
+          <div className="stat-card-top">
+            <span className="page-kicker">Draws</span>
+          </div>
+          <div className="standings-summary-value">{headToHeadSummary.draws}</div>
+          <p className="card-muted">Draw results in recent head-to-head meetings.</p>
+        </div>
+
+        <div className="card stat-card">
+          <div className="stat-card-top">
+            <span className="page-kicker">{match.awayTeamName}</span>
+          </div>
+          <div className="standings-summary-value">{headToHeadSummary.awayWins}</div>
+          <p className="card-muted">Wins in recent head-to-head meetings.</p>
+        </div>
+      </div>
+
+      <div className="card detail-card" style={{ marginTop: "22px" }}>
+        <h2 className="section-title">Team Comparison</h2>
+
+        {statsLoading ? (
+          <div className="loading-state">Loading comparison stats...</div>
+        ) : !homeStats || !awayStats ? (
+          <div className="empty-state">Comparison stats are not available.</div>
+        ) : (
+          <div className="comparison-grid">
+            <div className="comparison-stat-card">
+              <span className="detail-info-label">Win rate</span>
+              <div className="comparison-line">
+                <strong>{homeStats.winRate}%</strong>
+                <span>vs</span>
+                <strong>{awayStats.winRate}%</strong>
+              </div>
+            </div>
+
+            <div className="comparison-stat-card">
+              <span className="detail-info-label">Avg goals scored</span>
+              <div className="comparison-line">
+                <strong>{homeStats.averageGoalsFor}</strong>
+                <span>vs</span>
+                <strong>{awayStats.averageGoalsFor}</strong>
+              </div>
+            </div>
+
+            <div className="comparison-stat-card">
+              <span className="detail-info-label">Goal difference</span>
+              <div className="comparison-line">
+                <strong>{homeStats.goalDifference}</strong>
+                <span>vs</span>
+                <strong>{awayStats.goalDifference}</strong>
+              </div>
+            </div>
+
+            <div className="comparison-stat-card">
+              <span className="detail-info-label">Clean sheets</span>
+              <div className="comparison-line">
+                <strong>{homeStats.cleanSheets}</strong>
+                <span>vs</span>
+                <strong>{awayStats.cleanSheets}</strong>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="card detail-card" style={{ marginTop: "22px" }}>
+        <h2 className="section-title">Head-to-Head</h2>
+
+        {headToHeadLoading ? (
+          <div className="loading-state">Loading head-to-head...</div>
+        ) : !headToHeadMatches.length ? (
+          <div className="empty-state">No previous meetings found.</div>
+        ) : (
+          <div className="grid" style={{ gap: "12px" }}>
+            {headToHeadMatches.map((item) => (
+              <div
+                key={item.id}
+                className="mini-info-card"
+                style={{ background: "rgba(255,255,255,0.02)" }}
+              >
+                <div className="mini-info-title">
+                  {item.homeTeamName} vs {item.awayTeamName}
+                </div>
+                <div className="mini-info-text">
+                  Score: {item.homeScore ?? "-"} : {item.awayScore ?? "-"} •{" "}
+                  {item.tournamentName}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-2" style={{ marginTop: "22px" }}>
+        <div className="card detail-card">
+          <h2 className="section-title">Home Team Form</h2>
+
+          {recentLoading ? (
+            <div className="loading-state">Loading recent form...</div>
+          ) : !homeForm.length ? (
+            <div className="empty-state">No recent matches found.</div>
+          ) : (
+            <>
+              <div className="form-badges-row">
+                {homeForm.map((item) => (
+                  <span
+                    key={item.id}
+                    className={`form-badge form-badge-${item.result.toLowerCase()}`}
+                    title={`${item.result} vs ${item.opponentName}`}
+                  >
+                    {item.result}
+                  </span>
+                ))}
+              </div>
+
+              <div className="grid" style={{ gap: "12px", marginTop: "16px" }}>
+                {homeForm.map((item) => (
+                  <div
+                    key={item.id}
+                    className="mini-info-card"
+                    style={{ background: "rgba(255,255,255,0.02)" }}
+                  >
+                    <div className="mini-info-title">
+                      {item.homeTeamName} vs {item.awayTeamName}
+                    </div>
+                    <div className="mini-info-text">
+                      Score: {item.homeScore ?? "-"} : {item.awayScore ?? "-"} •{" "}
+                      {item.tournamentName}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="card detail-card">
+          <h2 className="section-title">Away Team Form</h2>
+
+          {recentLoading ? (
+            <div className="loading-state">Loading recent form...</div>
+          ) : !awayForm.length ? (
+            <div className="empty-state">No recent matches found.</div>
+          ) : (
+            <>
+              <div className="form-badges-row">
+                {awayForm.map((item) => (
+                  <span
+                    key={item.id}
+                    className={`form-badge form-badge-${item.result.toLowerCase()}`}
+                    title={`${item.result} vs ${item.opponentName}`}
+                  >
+                    {item.result}
+                  </span>
+                ))}
+              </div>
+
+              <div className="grid" style={{ gap: "12px", marginTop: "16px" }}>
+                {awayForm.map((item) => (
+                  <div
+                    key={item.id}
+                    className="mini-info-card"
+                    style={{ background: "rgba(255,255,255,0.02)" }}
+                  >
+                    <div className="mini-info-title">
+                      {item.homeTeamName} vs {item.awayTeamName}
+                    </div>
+                    <div className="mini-info-text">
+                      Score: {item.homeScore ?? "-"} : {item.awayScore ?? "-"} •{" "}
+                      {item.tournamentName}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

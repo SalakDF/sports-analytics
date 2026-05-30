@@ -4,11 +4,13 @@ import com.diplomna.sports_analytics_backend.dto.request.ExternalMatchSyncReques
 import com.diplomna.sports_analytics_backend.dto.response.ExternalMatchResponse;
 import com.diplomna.sports_analytics_backend.dto.response.ExternalMatchSyncResultResponse;
 import com.diplomna.sports_analytics_backend.dto.response.ExternalStandingsResponse;
+import com.diplomna.sports_analytics_backend.dto.response.ExternalTeamImportResultResponse;
 import com.diplomna.sports_analytics_backend.dto.response.ImportResultResponse;
 import com.diplomna.sports_analytics_backend.integration.FootballDataClient;
 import com.diplomna.sports_analytics_backend.service.ExternalFootballService;
 import com.diplomna.sports_analytics_backend.service.ExternalImportService;
 import com.diplomna.sports_analytics_backend.service.ExternalMatchSyncService;
+import com.diplomna.sports_analytics_backend.service.ExternalTeamImportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,6 +25,7 @@ public class ExternalFootballController {
     private final ExternalFootballService externalFootballService;
     private final ExternalImportService externalImportService;
     private final ExternalMatchSyncService externalMatchSyncService;
+    private final ExternalTeamImportService externalTeamImportService;
 
     @GetMapping("/competitions")
     public String getCompetitions() {
@@ -52,6 +55,11 @@ public class ExternalFootballController {
     @PostMapping("/competitions/{code}/import")
     public ImportResultResponse importCompetitionMatches(@PathVariable String code) {
         return externalImportService.importCompetitionMatches(code);
+    }
+
+    @PostMapping("/competitions/{code}/import-teams")
+    public ExternalTeamImportResultResponse importMissingTeams(@PathVariable String code) {
+        return externalTeamImportService.importMissingTeams(code);
     }
 
     @GetMapping("/imported-matches")

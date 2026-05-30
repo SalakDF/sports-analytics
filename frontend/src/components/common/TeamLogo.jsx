@@ -1,13 +1,30 @@
+import { useMemo, useState } from "react";
+
 export default function TeamLogo({
   name,
   shortName,
   logoUrl,
   size = "md",
 }) {
-  const initials =
-    shortName?.slice(0, 3)?.toUpperCase() ||
-    name?.slice(0, 3)?.toUpperCase() ||
-    "TM";
+  const [imageFailed, setImageFailed] = useState(false);
+
+  const initials = useMemo(() => {
+    const source = shortName?.trim() || name?.trim() || "?";
+
+    if (!source) return "?";
+
+    const words = source.split(/\s+/).filter(Boolean);
+
+    if (words.length === 1) {
+      return words[0].slice(0, 3).toUpperCase();
+    }
+
+    return words
+      .slice(0, 2)
+      .map((word) => word[0])
+      .join("")
+      .toUpperCase();
+  }, [name, shortName]);
 
   const sizeClass =
     size === "sm"
@@ -16,26 +33,26 @@ export default function TeamLogo({
       ? "team-logo team-logo-lg"
       : "team-logo";
 
-  if (logoUrl) {
-    return (
-      <div className={`${sizeClass} team-logo-image-wrap`}>
+  const shouldShowImage =
+    Boolean(logoUrl) &&
+    typeof logoUrl === "string" &&
+    logoUrl.trim() !== "" &&
+    !imageFailed;
+
+  return (
+    <div className={`${sizeClass} team-logo-shell`}>
+      {shouldShowImage ? (
         <img
           src={logoUrl}
           alt={name || "Team logo"}
           className="team-logo-image"
-          onError={(event) => {
-            event.currentTarget.style.display = "none";
-            event.currentTarget.parentElement.classList.add("team-logo-fallback");
-            event.currentTarget.parentElement.innerHTML = `<span>${initials}</span>`;
-          }}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setImageFailed(true)}
         />
-      </div>
-    );
-  }
-
-  return (
-    <div className={`${sizeClass} team-logo-fallback`}>
-      <span>{initials}</span>
+      ) : (
+        <span className="team-logo-fallback">{initials}</span>
+      )}
     </div>
   );
 }

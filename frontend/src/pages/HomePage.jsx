@@ -1,16 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchJson } from "../api/client";
 import TeamLogo from "../components/common/TeamLogo";
 
 export default function HomePage() {
   const [dashboard, setDashboard] = useState(null);
+  const [standings, setStandings] = useState([]);
+  const [teamStatsMap, setTeamStatsMap] = useState({});
+  const [selectedCompetition, setSelectedCompetition] = useState("ALL");
   const [loading, setLoading] = useState(true);
+  const [leagueLoading, setLeagueLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     loadDashboard();
   }, []);
+
+  useEffect(() => {
+    if (!dashboard) return;
+    loadLeagueData(selectedCompetition);
+  }, [dashboard, selectedCompetition]);
 
   async function loadDashboard() {
     setLoading(true);
@@ -26,22 +35,204 @@ export default function HomePage() {
     }
   }
 
+  async function loadLeagueData(competitionName) {
+    setLeagueLoading(true);
+
+    try {
+      const seasons = dashboard?.seasons || [];
+
+      let targetSeason = null;
+
+      if (competitionName === "ALL") {
+        targetSeason = seasons[0] || null;
+      } else {
+        targetSeason =
+          seasons.find((season) => season.tournamentName === competitionName) || null;
+      }
+
+      if (!targetSeason?.id) {
+        setStandings([]);
+        setTeamStatsMap({});
+        return;
+      }
+
+      const standingsData = await fetchJson(`/standings?seasonId=${targetSeason.id}`);
+      setStandings(standingsData);
+
+      const topTeams = standingsData.slice(0, 4);
+      const statsEntries = await Promise.all(
+        topTeams.map(async (team) => {
+          try {
+            const stats = await fetchJson(`/teams/${team.teamId}/stats`);
+            return [team.teamId, stats];
+          } catch {
+            return [team.teamId, null];
+          }
+        })
+      );
+
+      setTeamStatsMap(Object.fromEntries(statsEntries));
+    } catch {
+      setStandings([]);
+      setTeamStatsMap({});
+    } finally {
+      setLeagueLoading(false);
+    }
+  }
+
   function getStatusClass(status) {
     if (status === "LIVE") return "badge badge-live";
     if (status === "FINISHED") return "badge badge-finished";
     return "badge badge-scheduled";
   }
 
+  const seasons = dashboard?.seasons || [];
+  const recentMatches = dashboard?.recentMatches || [];
+
+  const competitionOptions = useMemo(() => {
+    const names = seasons
+      .map((season) => season.tournamentName)
+      .filter(Boolean);
+
+    return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+  }, [seasons]);
+
+  const filteredRecentMatches = useMemo(() => {
+    if (selectedCompetition === "ALL") return recentMatches;
+
+    return recentMatches.filter(
+      (match) => match.tournamentName === selectedCompetition
+    );
+  }, [recentMatches, selectedCompetition]);
+
+  const insights = useMemo(() => {
+    if (!standings.length) {
+      return {
+        leader: null,
+        bestAttack: null,
+        bestDefense: null,
+        mostWins: null,
+      };
+    }
+
+    const leader = standings[0];
+
+    const bestAttack = standings.reduce((best, row) =>
+      !best || row.goalsFor > best.goalsFor ? row : best
+    , null);
+
+    const bestDefense = standings.reduce((best, row) =>
+      !best || row.goalsAgainst < best.goalsAgainst ? row : best
+    , null);
+
+    const mostWins = standings.reduce((best, row) =>
+      !best || row.wins > best.wins ? row : best
+    , null);
+
+    return { leader, bestAttack, bestDefense, mostWins };
+  }, [standings]);
+
+  const featuredTeams = useMemo(() => standings.slice(0, 4), [standings]);
+
+  const liveMatches = useMemo(
+    () => filteredRecentMatches.filter((m) => m.status === "LIVE").slice(0, 4),
+    [filteredRecentMatches]
+  );
+
+  const upcomingMatches = useMemo(
+    () =>
+      filteredRecentMatches
+        .filter((m) => m.status !== "LIVE" && m.status !== "FINISHED")
+        .slice(0, 4),
+    [filteredRecentMatches]
+  );
+
+  const finishedMatches = useMemo(
+    () => filteredRecentMatches.filter((m) => m.status === "FINISHED").slice(0, 4),
+    [filteredRecentMatches]
+  );
+
   if (loading) return <div className="loading-state">Loading dashboard...</div>;
   if (error) return <div className="error-state">{error}</div>;
   if (!dashboard) return <div className="empty-state">No dashboard data.</div>;
 
-  const recentMatches = dashboard.recentMatches || [];
-  const topStandings = dashboard.topStandings || [];
-  const seasons = dashboard.seasons || [];
+  const selectedSeason =
+    selectedCompetition === "ALL"
+      ? seasons[0] || null
+      : seasons.find((season) => season.tournamentName === selectedCompetition) || null;
+
+  function renderMiniMatch(match) {
+    return (
+      <div key={match.id} className="home-mini-match-card">
+        <div className="home-mini-match-top">
+          <span className={getStatusClass(match.status)}>{match.status}</span>
+          <span className="mini-info-text">
+            {match.scheduledAt
+              ? new Date(match.scheduledAt).toLocaleDateString()
+              : "No date"}
+          </span>
+        </div>
+
+        <div className="home-mini-match-teams">
+          <div className="team-inline">
+            <TeamLogo
+              name={match.homeTeamName}
+              logoUrl={match.homeTeamLogoUrl}
+              size="sm"
+            />
+            <div className="team-inline-text">
+              <div className="team-inline-name">{match.homeTeamName}</div>
+            </div>
+          </div>
+
+          <div className="home-mini-score">
+            {match.homeScore ?? "-"} : {match.awayScore ?? "-"}
+          </div>
+
+          <div className="team-inline">
+            <TeamLogo
+              name={match.awayTeamName}
+              logoUrl={match.awayTeamLogoUrl}
+              size="sm"
+            />
+            <div className="team-inline-text">
+              <div className="team-inline-name">{match.awayTeamName}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mini-info-text">
+          {match.tournamentName} • {match.seasonName}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
+      <div className="league-tabs-wrap" style={{ marginBottom: "18px" }}>
+        <button
+          type="button"
+          className={`league-tab ${selectedCompetition === "ALL" ? "league-tab-active" : ""}`}
+          onClick={() => setSelectedCompetition("ALL")}
+        >
+          All
+        </button>
+
+        {competitionOptions.map((competition) => (
+          <button
+            key={competition}
+            type="button"
+            className={`league-tab ${
+              selectedCompetition === competition ? "league-tab-active" : ""
+            }`}
+            onClick={() => setSelectedCompetition(competition)}
+          >
+            {competition}
+          </button>
+        ))}
+      </div>
+
       <section className="home-hero premium-home-hero">
         <div className="home-hero-content">
           <div>
@@ -68,23 +259,30 @@ export default function HomePage() {
 
         <div className="home-hero-side">
           <div className="hero-panel">
-            <div className="hero-panel-label">Current snapshot</div>
+            <div className="hero-panel-label">League snapshot</div>
+
             <div className="hero-panel-value">
-              {dashboard.scheduledMatchesCount ?? 0} scheduled
+              {selectedCompetition === "ALL" ? "All leagues" : selectedCompetition}
             </div>
-            <div className="hero-panel-text">
-              Dashboard працює через єдиний endpoint, а система вже вміє
-              синхронізувати реальні зовнішні матчі у внутрішню базу даних.
+
+            <div className="hero-panel-text" style={{ marginTop: "10px" }}>
+              {selectedSeason
+                ? `${selectedSeason.tournamentName} • ${selectedSeason.name}`
+                : "League is not selected"}
             </div>
 
             <div className="hero-mini-stats">
               <div className="hero-mini-stat">
                 <span>Live</span>
-                <strong>{dashboard.liveMatchesCount ?? 0}</strong>
+                <strong>{liveMatches.length}</strong>
+              </div>
+              <div className="hero-mini-stat">
+                <span>Upcoming</span>
+                <strong>{upcomingMatches.length}</strong>
               </div>
               <div className="hero-mini-stat">
                 <span>Finished</span>
-                <strong>{dashboard.finishedMatchesCount ?? 0}</strong>
+                <strong>{finishedMatches.length}</strong>
               </div>
             </div>
           </div>
@@ -96,9 +294,7 @@ export default function HomePage() {
           <div className="stat-card-top">
             <span className="page-kicker">Live</span>
           </div>
-          <div className="hero-panel-value stat-card-value">
-            {dashboard.liveMatchesCount ?? 0}
-          </div>
+          <div className="hero-panel-value stat-card-value">{liveMatches.length}</div>
           <p className="card-muted">Матчі, які зараз тривають.</p>
         </div>
 
@@ -106,9 +302,7 @@ export default function HomePage() {
           <div className="stat-card-top">
             <span className="page-kicker">Finished</span>
           </div>
-          <div className="hero-panel-value stat-card-value">
-            {dashboard.finishedMatchesCount ?? 0}
-          </div>
+          <div className="hero-panel-value stat-card-value">{finishedMatches.length}</div>
           <p className="card-muted">Матчі, які вже завершились.</p>
         </div>
 
@@ -116,85 +310,247 @@ export default function HomePage() {
           <div className="stat-card-top">
             <span className="page-kicker">Upcoming</span>
           </div>
-          <div className="hero-panel-value stat-card-value">
-            {dashboard.scheduledMatchesCount ?? 0}
-          </div>
+          <div className="hero-panel-value stat-card-value">{upcomingMatches.length}</div>
           <p className="card-muted">Матчі, заплановані на найближчий час.</p>
         </div>
       </div>
 
-      <div className="grid grid-2" style={{ marginTop: "22px" }}>
+      {leagueLoading ? (
+        <div className="loading-state" style={{ marginTop: "22px" }}>
+          Loading league data...
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-2" style={{ marginTop: "22px" }}>
+            <div className="card analytics-card">
+              <div className="section-header-row">
+                <h2 className="section-title" style={{ margin: 0 }}>
+                  League Insights
+                </h2>
+                <Link className="action-link" to="/standings">
+                  Full table →
+                </Link>
+              </div>
+
+              {!insights.leader ? (
+                <div className="empty-state">No standings data available for insights.</div>
+              ) : (
+                <div className="grid" style={{ gap: "12px" }}>
+                  <div className="insight-row">
+                    <div className="insight-label">Leader</div>
+                    <div className="insight-value-wrap">
+                      <TeamLogo
+                        name={insights.leader.teamName}
+                        logoUrl={insights.leader.teamLogoUrl}
+                        size="sm"
+                      />
+                      <div>
+                        <div className="mini-info-title">{insights.leader.teamName}</div>
+                        <div className="mini-info-text">
+                          {insights.leader.points} pts
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="insight-row">
+                    <div className="insight-label">Best attack</div>
+                    <div className="insight-value-wrap">
+                      <TeamLogo
+                        name={insights.bestAttack.teamName}
+                        logoUrl={insights.bestAttack.teamLogoUrl}
+                        size="sm"
+                      />
+                      <div>
+                        <div className="mini-info-title">{insights.bestAttack.teamName}</div>
+                        <div className="mini-info-text">
+                          {insights.bestAttack.goalsFor} goals scored
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="insight-row">
+                    <div className="insight-label">Best defense</div>
+                    <div className="insight-value-wrap">
+                      <TeamLogo
+                        name={insights.bestDefense.teamName}
+                        logoUrl={insights.bestDefense.teamLogoUrl}
+                        size="sm"
+                      />
+                      <div>
+                        <div className="mini-info-title">{insights.bestDefense.teamName}</div>
+                        <div className="mini-info-text">
+                          {insights.bestDefense.goalsAgainst} goals conceded
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="insight-row">
+                    <div className="insight-label">Most wins</div>
+                    <div className="insight-value-wrap">
+                      <TeamLogo
+                        name={insights.mostWins.teamName}
+                        logoUrl={insights.mostWins.teamLogoUrl}
+                        size="sm"
+                      />
+                      <div>
+                        <div className="mini-info-title">{insights.mostWins.teamName}</div>
+                        <div className="mini-info-text">
+                          {insights.mostWins.wins} wins
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="section-header-row">
+                <h2 className="section-title" style={{ margin: 0 }}>
+                  Top Standings
+                </h2>
+                <Link className="action-link" to="/standings">
+                  Full table →
+                </Link>
+              </div>
+
+              {!standings.length ? (
+                <div className="empty-state">No standings found.</div>
+              ) : (
+                <div className="table-wrap">
+                  <table className="standings-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Team</th>
+                        <th>P</th>
+                        <th>Pts</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {standings.slice(0, 5).map((row) => (
+                        <tr key={row.id}>
+                          <td>{row.position}</td>
+                          <td>
+                            <div className="standings-team-wrap">
+                              <TeamLogo
+                                name={row.teamName}
+                                logoUrl={row.teamLogoUrl}
+                                size="sm"
+                              />
+                              <span className="team-cell">{row.teamName}</span>
+                            </div>
+                          </td>
+                          <td>{row.played}</td>
+                          <td className="points-cell">{row.points}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {selectedSeason ? (
+                <p className="results-count" style={{ marginTop: "14px", marginBottom: 0 }}>
+                  Season:{" "}
+                  {selectedSeason.tournamentName
+                    ? `${selectedSeason.tournamentName} • ${selectedSeason.name}`
+                    : selectedSeason.name}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="card" style={{ marginTop: "22px" }}>
+            <div className="section-header-row">
+              <h2 className="section-title" style={{ margin: 0 }}>
+                Featured Teams
+              </h2>
+              <Link className="action-link" to="/teams">
+                All teams →
+              </Link>
+            </div>
+
+            {!featuredTeams.length ? (
+              <div className="empty-state">No featured teams found.</div>
+            ) : (
+              <div className="grid grid-2">
+                {featuredTeams.map((team) => {
+                  const stats = teamStatsMap[team.teamId];
+
+                  return (
+                    <div className="featured-team-card" key={team.teamId}>
+                      <div className="featured-team-top">
+                        <div className="standings-team-wrap">
+                          <TeamLogo
+                            name={team.teamName}
+                            logoUrl={team.teamLogoUrl}
+                            size="sm"
+                          />
+                          <div>
+                            <div className="mini-info-title">{team.teamName}</div>
+                            <div className="mini-info-text">
+                              Position #{team.position}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="featured-team-points">{team.points} pts</div>
+                      </div>
+
+                      <div className="featured-team-stats">
+                        <div className="featured-team-stat">
+                          <span>Wins</span>
+                          <strong>{team.wins}</strong>
+                        </div>
+
+                        <div className="featured-team-stat">
+                          <span>GD</span>
+                          <strong>{team.goalDifference}</strong>
+                        </div>
+
+                        <div className="featured-team-stat">
+                          <span>Win rate</span>
+                          <strong>{stats ? `${stats.winRate}%` : "-"}</strong>
+                        </div>
+
+                        <div className="featured-team-stat">
+                          <span>Goals</span>
+                          <strong>{stats ? stats.goalsFor : "-"}</strong>
+                        </div>
+                      </div>
+
+                      <Link className="action-link" to={`/teams/${team.teamId}`}>
+                        Open team →
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      <div className="grid grid-3" style={{ marginTop: "22px" }}>
         <div className="card">
           <div className="section-header-row">
             <h2 className="section-title" style={{ margin: 0 }}>
-              Recent Matches
+              Live Now
             </h2>
             <Link className="action-link" to="/matches">
-              All matches →
+              Open →
             </Link>
           </div>
 
-          {!recentMatches.length ? (
-            <div className="empty-state">No matches found.</div>
+          {!liveMatches.length ? (
+            <div className="empty-state">No live matches right now.</div>
           ) : (
-            <div className="grid" style={{ gap: "14px" }}>
-              {recentMatches.map((match) => (
-                <div key={match.id} className="match-preview-card">
-                  <div className="match-card-header">
-                    <div className="match-teams-stack">
-                      <div className="team-inline">
-                        <TeamLogo
-                          name={match.homeTeamName}
-                          logoUrl={match.homeTeamLogoUrl}
-                          size="sm"
-                        />
-                        <div className="team-inline-text">
-                          <div className="team-inline-name">{match.homeTeamName}</div>
-                          <div className="team-inline-subtitle">Home</div>
-                        </div>
-                      </div>
-
-                      <div className="team-inline">
-                        <TeamLogo
-                          name={match.awayTeamName}
-                          logoUrl={match.awayTeamLogoUrl}
-                          size="sm"
-                        />
-                        <div className="team-inline-text">
-                          <div className="team-inline-name">{match.awayTeamName}</div>
-                          <div className="team-inline-subtitle">Away</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ textAlign: "right" }}>
-                      <div className="score-value home-score-preview">
-                        {match.homeScore ?? "-"} : {match.awayScore ?? "-"}
-                      </div>
-                      <span className={getStatusClass(match.status)}>
-                        {match.status}
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="card-muted" style={{ marginTop: "14px" }}>
-                    {match.tournamentName} • {match.seasonName}
-                  </p>
-
-                  <div className="meta-row">
-                    <span className="badge">{match.roundName || "Round -"}</span>
-                    <span className="badge">
-                      {match.scheduledAt
-                        ? new Date(match.scheduledAt).toLocaleString()
-                        : "Date not available"}
-                    </span>
-                  </div>
-
-                  <Link className="action-link" to={`/matches/${match.id}`}>
-                    Open match →
-                  </Link>
-                </div>
-              ))}
+            <div className="grid" style={{ gap: "12px" }}>
+              {liveMatches.map(renderMiniMatch)}
             </div>
           )}
         </div>
@@ -202,57 +558,39 @@ export default function HomePage() {
         <div className="card">
           <div className="section-header-row">
             <h2 className="section-title" style={{ margin: 0 }}>
-              Top Standings
+              Upcoming
             </h2>
-            <Link className="action-link" to="/standings">
-              Full table →
+            <Link className="action-link" to="/matches">
+              Open →
             </Link>
           </div>
 
-          {!topStandings.length ? (
-            <div className="empty-state">No standings found.</div>
+          {!upcomingMatches.length ? (
+            <div className="empty-state">No upcoming matches.</div>
           ) : (
-            <div className="table-wrap">
-              <table className="standings-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Team</th>
-                    <th>P</th>
-                    <th>Pts</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topStandings.map((row) => (
-                    <tr key={row.id}>
-                      <td>{row.position}</td>
-                      <td>
-                        <div className="standings-team-wrap">
-                          <TeamLogo
-                            name={row.teamName}
-                            logoUrl={row.teamLogoUrl}
-                            size="sm"
-                          />
-                          <span className="team-cell">{row.teamName}</span>
-                        </div>
-                      </td>
-                      <td>{row.played}</td>
-                      <td className="points-cell">{row.points}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="grid" style={{ gap: "12px" }}>
+              {upcomingMatches.map(renderMiniMatch)}
             </div>
           )}
+        </div>
 
-          {topStandings[0]?.seasonName ? (
-            <p className="results-count" style={{ marginTop: "14px", marginBottom: 0 }}>
-              Season:{" "}
-              {topStandings[0].tournamentName
-                ? `${topStandings[0].tournamentName} • ${topStandings[0].seasonName}`
-                : topStandings[0].seasonName}
-            </p>
-          ) : null}
+        <div className="card">
+          <div className="section-header-row">
+            <h2 className="section-title" style={{ margin: 0 }}>
+              Latest Results
+            </h2>
+            <Link className="action-link" to="/matches">
+              Open →
+            </Link>
+          </div>
+
+          {!finishedMatches.length ? (
+            <div className="empty-state">No finished matches yet.</div>
+          ) : (
+            <div className="grid" style={{ gap: "12px" }}>
+              {finishedMatches.map(renderMiniMatch)}
+            </div>
+          )}
         </div>
       </div>
 

@@ -53,6 +53,21 @@ public class MatchService {
         return toResponse(match);
     }
 
+    public List<MatchResponse> getHeadToHeadByMatchId(Long matchId) {
+        Match currentMatch = matchRepository.findById(matchId)
+                .orElseThrow(() -> new RuntimeException("Match not found with id: " + matchId));
+
+        return matchRepository.findHeadToHeadFinishedMatches(
+                        currentMatch.getHomeTeam().getId(),
+                        currentMatch.getAwayTeam().getId()
+                )
+                .stream()
+                .filter(match -> !match.getId().equals(matchId))
+                .limit(5)
+                .map(this::toResponse)
+                .toList();
+    }
+
     private MatchResponse toResponse(Match match) {
         return MatchResponse.builder()
                 .id(match.getId())

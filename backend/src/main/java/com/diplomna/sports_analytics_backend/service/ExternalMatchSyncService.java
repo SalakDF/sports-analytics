@@ -26,6 +26,7 @@ public class ExternalMatchSyncService {
     private final SeasonRepository seasonRepository;
     private final TeamRepository teamRepository;
     private final MatchRepository matchRepository;
+    private final StandingRebuildService standingRebuildService;
 
     public ExternalMatchSyncResultResponse syncMatches(ExternalMatchSyncRequest request) {
         if (request.getCompetitionCode() == null || request.getCompetitionCode().isBlank()) {
@@ -132,6 +133,8 @@ public class ExternalMatchSyncService {
 
             externalMatchSyncRepository.save(syncRecord);
         }
+
+        standingRebuildService.rebuildSeasonStandings(resolvedSeasonId);
 
         return ExternalMatchSyncResultResponse.builder()
                 .competitionCode(request.getCompetitionCode())
