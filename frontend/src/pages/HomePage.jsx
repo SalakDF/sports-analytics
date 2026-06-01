@@ -1,7 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchJson } from "../api/client";
+import { fetchJson, postJson, postRequest } from "../api/client";
 import TeamLogo from "../components/common/TeamLogo";
+import { useTimezone } from "../context/TimezoneContext";
+import { useLanguage } from "../context/LanguageContext";
+import { formatDateFromMs, formatDateTimeFromMs, parseMatchTimestamp } from "../utils/datetime";
+
+const EXTERNAL_COMPETITION_CODES = {
+  "Premier League": "PL",
+  Bundesliga: "BL1",
+  "La Liga": "PD",
+  "Serie A": "SA",
+  "Champions League": "CL",
+};
+
+const LIVE_REFRESH_MS = 45_000;
 
 export default function HomePage() {
   const [dashboard, setDashboard] = useState(null);
@@ -11,27 +24,71 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [leagueLoading, setLeagueLoading] = useState(false);
   const [error, setError] = useState("");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const { timezone } = useTimezone();
+  const { t } = useLanguage();
 
   useEffect(() => {
-    loadDashboard();
+    loadDashboard(false);
   }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadDashboard(true);
+    }, LIVE_REFRESH_MS);
+
+    return () => clearInterval(timer);
+  }, [selectedCompetition]);
 
   useEffect(() => {
     if (!dashboard) return;
     loadLeagueData(selectedCompetition);
   }, [dashboard, selectedCompetition]);
 
-  async function loadDashboard() {
-    setLoading(true);
-    setError("");
+  async function loadDashboard(silent = false) {
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
 
     try {
       const data = await fetchJson("/dashboard");
-      setDashboard(data);
+      const synced = await syncCurrentCompetitionMatches(data);
+      setDashboard(synced ? await fetchJson("/dashboard") : data);
+      setLastUpdatedAt(Date.now());
     } catch {
-      setError("Failed to load dashboard data.");
+      if (!silent) {
+        setError("Failed to load dashboard data.");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
+    }
+  }
+
+  async function syncCurrentCompetitionMatches(dashboardData) {
+    const seasonsData = dashboardData?.seasons || [];
+    const targetSeason =
+      selectedCompetition === "ALL"
+        ? seasonsData[0] || null
+        : seasonsData.find((season) => season.tournamentName === selectedCompetition) || null;
+
+    if (!targetSeason?.id || !targetSeason?.tournamentName) return false;
+
+    const competitionCode = EXTERNAL_COMPETITION_CODES[targetSeason.tournamentName];
+    if (!competitionCode) return false;
+
+    try {
+      await postRequest(`/external/football/competitions/${competitionCode}/import-teams`);
+      await postRequest(`/external/football/team-mappings/auto?competitionCode=${competitionCode}`);
+      await postJson("/external/football/sync-matches", {
+        competitionCode,
+        seasonId: targetSeason.id,
+      });
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -86,6 +143,46 @@ export default function HomePage() {
     return "badge badge-scheduled";
   }
 
+  function formatMatchDate(match) {
+    return formatDateFromMs(parseMatchTimestamp(match), timezone);
+  }
+
+  function getDisplayStatus(match) {
+    if (!match) return "SCHEDULED";
+
+    const scheduledAtMs = parseMatchTimestamp(match);
+
+    if (match.status === "FINISHED") return "FINISHED";
+    if (!scheduledAtMs) return match.status || "SCHEDULED";
+
+    const nowMs = Date.now();
+    const hoursFromKickoff = (nowMs - scheduledAtMs) / (1000 * 60 * 60);
+
+    if (match.status === "LIVE") {
+      if (hoursFromKickoff > 4) return "FINISHED";
+      return "LIVE";
+    }
+
+    if (match.status === "SCHEDULED" && hoursFromKickoff >= 0 && hoursFromKickoff <= 3) {
+      return "LIVE";
+    }
+
+    return match.status || "SCHEDULED";
+  }
+
+  function getStatusSection(match) {
+    const displayStatus = getDisplayStatus(match);
+    if (displayStatus === "LIVE") return "LIVE";
+    if (displayStatus === "FINISHED") return "FINISHED";
+
+    const scheduledAtMs = parseMatchTimestamp(match);
+    if (displayStatus === "SCHEDULED" && scheduledAtMs && scheduledAtMs < Date.now()) {
+      return "FINISHED";
+    }
+
+    return "UPCOMING";
+  }
+
   const seasons = dashboard?.seasons || [];
   const recentMatches = dashboard?.recentMatches || [];
 
@@ -134,27 +231,35 @@ export default function HomePage() {
 
   const featuredTeams = useMemo(() => standings.slice(0, 4), [standings]);
 
-  const liveMatches = useMemo(
-    () => filteredRecentMatches.filter((m) => m.status === "LIVE").slice(0, 4),
-    [filteredRecentMatches]
-  );
+  const { liveMatches, upcomingMatches, finishedMatches } = useMemo(() => {
+    const live = [];
+    const upcoming = [];
+    const finished = [];
 
-  const upcomingMatches = useMemo(
-    () =>
-      filteredRecentMatches
-        .filter((m) => m.status !== "LIVE" && m.status !== "FINISHED")
-        .slice(0, 4),
-    [filteredRecentMatches]
-  );
+    for (const match of filteredRecentMatches) {
+      const section = getStatusSection(match);
+      if (section === "LIVE") live.push(match);
+      else if (section === "FINISHED") finished.push(match);
+      else upcoming.push(match);
+    }
 
-  const finishedMatches = useMemo(
-    () => filteredRecentMatches.filter((m) => m.status === "FINISHED").slice(0, 4),
-    [filteredRecentMatches]
-  );
+    const sortByDateDesc = (a, b) => (parseMatchTimestamp(b) || 0) - (parseMatchTimestamp(a) || 0);
+    const sortByDateAsc = (a, b) => (parseMatchTimestamp(a) || 0) - (parseMatchTimestamp(b) || 0);
 
-  if (loading) return <div className="loading-state">Loading dashboard...</div>;
+    live.sort(sortByDateDesc);
+    finished.sort(sortByDateDesc);
+    upcoming.sort(sortByDateAsc);
+
+    return { liveMatches: live, upcomingMatches: upcoming, finishedMatches: finished };
+  }, [filteredRecentMatches]);
+
+  const liveMatchesPreview = useMemo(() => liveMatches.slice(0, 4), [liveMatches]);
+  const upcomingMatchesPreview = useMemo(() => upcomingMatches.slice(0, 4), [upcomingMatches]);
+  const finishedMatchesPreview = useMemo(() => finishedMatches.slice(0, 4), [finishedMatches]);
+
+  if (loading) return <div className="loading-state">{t("home.loadingDashboard", "Loading dashboard...")}</div>;
   if (error) return <div className="error-state">{error}</div>;
-  if (!dashboard) return <div className="empty-state">No dashboard data.</div>;
+  if (!dashboard) return <div className="empty-state">{t("home.noDashboardData", "No dashboard data.")}</div>;
 
   const selectedSeason =
     selectedCompetition === "ALL"
@@ -165,21 +270,15 @@ export default function HomePage() {
     return (
       <div key={match.id} className="home-mini-match-card">
         <div className="home-mini-match-top">
-          <span className={getStatusClass(match.status)}>{match.status}</span>
-          <span className="mini-info-text">
-            {match.scheduledAt
-              ? new Date(match.scheduledAt).toLocaleDateString()
-              : "No date"}
+          <span className={getStatusClass(getDisplayStatus(match))}>
+            {getDisplayStatus(match)}
           </span>
+          <span className="mini-info-text">{formatMatchDate(match)}</span>
         </div>
 
         <div className="home-mini-match-teams">
           <div className="team-inline">
-            <TeamLogo
-              name={match.homeTeamName}
-              logoUrl={match.homeTeamLogoUrl}
-              size="sm"
-            />
+            <TeamLogo name={match.homeTeamName} logoUrl={match.homeTeamLogoUrl} size="sm" />
             <div className="team-inline-text">
               <div className="team-inline-name">{match.homeTeamName}</div>
             </div>
@@ -190,11 +289,7 @@ export default function HomePage() {
           </div>
 
           <div className="team-inline">
-            <TeamLogo
-              name={match.awayTeamName}
-              logoUrl={match.awayTeamLogoUrl}
-              size="sm"
-            />
+            <TeamLogo name={match.awayTeamName} logoUrl={match.awayTeamLogoUrl} size="sm" />
             <div className="team-inline-text">
               <div className="team-inline-name">{match.awayTeamName}</div>
             </div>
@@ -216,42 +311,43 @@ export default function HomePage() {
           className={`league-tab ${selectedCompetition === "ALL" ? "league-tab-active" : ""}`}
           onClick={() => setSelectedCompetition("ALL")}
         >
-          All
+          {t("common.all", "All")}
         </button>
 
         {competitionOptions.map((competition) => (
           <button
             key={competition}
             type="button"
-            className={`league-tab ${
-              selectedCompetition === competition ? "league-tab-active" : ""
-            }`}
+            className={`league-tab ${selectedCompetition === competition ? "league-tab-active" : ""}`}
             onClick={() => setSelectedCompetition(competition)}
           >
             {competition}
           </button>
         ))}
+
       </div>
+
+      {lastUpdatedAt ? (
+        <p className="results-count" style={{ marginBottom: "14px" }}>
+          {t("matches.autoRefresh", "Live auto-refresh")}: every 45s | {t("matches.updated", "Updated")}: {formatDateTimeFromMs(lastUpdatedAt, timezone)}
+        </p>
+      ) : null}
 
       <section className="home-hero premium-home-hero">
         <div className="home-hero-content">
           <div>
-            <span className="page-kicker">Sports Analytics Platform</span>
-            <h1 className="page-title">
-              Real match data, standings, teams and favorites in one place
-            </h1>
+            <span className="page-kicker">{t("home.platformKicker", "Sports Analytics Platform")}</span>
+            <h1 className="page-title">{t("home.heroTitle", "Real match data, standings, teams and favorites in one place")}</h1>
             <p className="page-subtitle">
-              Платформа для спортивних любителів із внутрішньою системою матчів,
-              турнірних таблиць, команд, favorites та інтеграцією із зовнішнім
-              футбольним API.
+              {t("home.heroSubtitle", "Platform for football fans with real matches, standings, team pages, favorites and external API synchronization.")}
             </p>
 
             <div className="hero-actions">
               <Link to="/matches" className="hero-button hero-button-primary">
-                Explore matches
+                {t("home.exploreMatches", "Explore matches")}
               </Link>
               <Link to="/standings" className="hero-button hero-button-secondary">
-                Open standings
+                {t("home.openStandings", "Open standings")}
               </Link>
             </div>
           </div>
@@ -259,16 +355,16 @@ export default function HomePage() {
 
         <div className="home-hero-side">
           <div className="hero-panel">
-            <div className="hero-panel-label">League snapshot</div>
+            <div className="hero-panel-label">{t("home.leagueSnapshot", "League snapshot")}</div>
 
             <div className="hero-panel-value">
-              {selectedCompetition === "ALL" ? "All leagues" : selectedCompetition}
+              {selectedCompetition === "ALL" ? t("home.allLeagues", "All leagues") : selectedCompetition}
             </div>
 
             <div className="hero-panel-text" style={{ marginTop: "10px" }}>
               {selectedSeason
                 ? `${selectedSeason.tournamentName} • ${selectedSeason.name}`
-                : "League is not selected"}
+                : t("home.leagueNotSelected", "League is not selected")}
             </div>
 
             <div className="hero-mini-stats">
@@ -277,11 +373,11 @@ export default function HomePage() {
                 <strong>{liveMatches.length}</strong>
               </div>
               <div className="hero-mini-stat">
-                <span>Upcoming</span>
+                <span>{t("common.upcoming", "Upcoming")}</span>
                 <strong>{upcomingMatches.length}</strong>
               </div>
               <div className="hero-mini-stat">
-                <span>Finished</span>
+                <span>{t("common.finished", "Finished")}</span>
                 <strong>{finishedMatches.length}</strong>
               </div>
             </div>
@@ -295,7 +391,7 @@ export default function HomePage() {
             <span className="page-kicker">Live</span>
           </div>
           <div className="hero-panel-value stat-card-value">{liveMatches.length}</div>
-          <p className="card-muted">Матчі, які зараз тривають.</p>
+          <p className="card-muted">{t("home.liveNowDesc", "Matches that are currently live.")}</p>
         </div>
 
         <div className="card stat-card">
@@ -303,7 +399,7 @@ export default function HomePage() {
             <span className="page-kicker">Finished</span>
           </div>
           <div className="hero-panel-value stat-card-value">{finishedMatches.length}</div>
-          <p className="card-muted">Матчі, які вже завершились.</p>
+          <p className="card-muted">{t("home.completedDesc", "Completed matches.")}</p>
         </div>
 
         <div className="card stat-card">
@@ -311,95 +407,67 @@ export default function HomePage() {
             <span className="page-kicker">Upcoming</span>
           </div>
           <div className="hero-panel-value stat-card-value">{upcomingMatches.length}</div>
-          <p className="card-muted">Матчі, заплановані на найближчий час.</p>
+          <p className="card-muted">{t("home.scheduledDesc", "Scheduled matches.")}</p>
         </div>
       </div>
 
       {leagueLoading ? (
         <div className="loading-state" style={{ marginTop: "22px" }}>
-          Loading league data...
+          {t("home.loadingLeagueData", "Loading league data...")}
         </div>
       ) : (
         <>
           <div className="grid grid-2" style={{ marginTop: "22px" }}>
             <div className="card analytics-card">
               <div className="section-header-row">
-                <h2 className="section-title" style={{ margin: 0 }}>
-                  League Insights
-                </h2>
-                <Link className="action-link" to="/standings">
-                  Full table →
-                </Link>
+                <h2 className="section-title" style={{ margin: 0 }}>{t("home.leagueInsights", "League Insights")}</h2>
+                <Link className="action-link" to="/standings">{t("home.fullTable", "Full table")} →</Link>
               </div>
 
               {!insights.leader ? (
-                <div className="empty-state">No standings data available for insights.</div>
+                <div className="empty-state">{t("home.noInsightData", "No standings data available for insights.")}</div>
               ) : (
                 <div className="grid" style={{ gap: "12px" }}>
                   <div className="insight-row">
-                    <div className="insight-label">Leader</div>
+                    <div className="insight-label">{t("home.leader", "Leader")}</div>
                     <div className="insight-value-wrap">
-                      <TeamLogo
-                        name={insights.leader.teamName}
-                        logoUrl={insights.leader.teamLogoUrl}
-                        size="sm"
-                      />
+                      <TeamLogo name={insights.leader.teamName} logoUrl={insights.leader.teamLogoUrl} size="sm" />
                       <div>
                         <div className="mini-info-title">{insights.leader.teamName}</div>
-                        <div className="mini-info-text">
-                          {insights.leader.points} pts
-                        </div>
+                        <div className="mini-info-text">{insights.leader.points} {t("home.pts", "pts")}</div>
                       </div>
                     </div>
                   </div>
 
                   <div className="insight-row">
-                    <div className="insight-label">Best attack</div>
+                    <div className="insight-label">{t("home.bestAttack", "Best attack")}</div>
                     <div className="insight-value-wrap">
-                      <TeamLogo
-                        name={insights.bestAttack.teamName}
-                        logoUrl={insights.bestAttack.teamLogoUrl}
-                        size="sm"
-                      />
+                      <TeamLogo name={insights.bestAttack.teamName} logoUrl={insights.bestAttack.teamLogoUrl} size="sm" />
                       <div>
                         <div className="mini-info-title">{insights.bestAttack.teamName}</div>
-                        <div className="mini-info-text">
-                          {insights.bestAttack.goalsFor} goals scored
-                        </div>
+                        <div className="mini-info-text">{insights.bestAttack.goalsFor} {t("home.goalsScored", "goals scored")}</div>
                       </div>
                     </div>
                   </div>
 
                   <div className="insight-row">
-                    <div className="insight-label">Best defense</div>
+                    <div className="insight-label">{t("home.bestDefense", "Best defense")}</div>
                     <div className="insight-value-wrap">
-                      <TeamLogo
-                        name={insights.bestDefense.teamName}
-                        logoUrl={insights.bestDefense.teamLogoUrl}
-                        size="sm"
-                      />
+                      <TeamLogo name={insights.bestDefense.teamName} logoUrl={insights.bestDefense.teamLogoUrl} size="sm" />
                       <div>
                         <div className="mini-info-title">{insights.bestDefense.teamName}</div>
-                        <div className="mini-info-text">
-                          {insights.bestDefense.goalsAgainst} goals conceded
-                        </div>
+                        <div className="mini-info-text">{insights.bestDefense.goalsAgainst} {t("home.goalsConceded", "goals conceded")}</div>
                       </div>
                     </div>
                   </div>
 
                   <div className="insight-row">
-                    <div className="insight-label">Most wins</div>
+                    <div className="insight-label">{t("home.mostWins", "Most wins")}</div>
                     <div className="insight-value-wrap">
-                      <TeamLogo
-                        name={insights.mostWins.teamName}
-                        logoUrl={insights.mostWins.teamLogoUrl}
-                        size="sm"
-                      />
+                      <TeamLogo name={insights.mostWins.teamName} logoUrl={insights.mostWins.teamLogoUrl} size="sm" />
                       <div>
                         <div className="mini-info-title">{insights.mostWins.teamName}</div>
-                        <div className="mini-info-text">
-                          {insights.mostWins.wins} wins
-                        </div>
+                        <div className="mini-info-text">{insights.mostWins.wins} {t("home.wins", "wins")}</div>
                       </div>
                     </div>
                   </div>
@@ -409,23 +477,19 @@ export default function HomePage() {
 
             <div className="card">
               <div className="section-header-row">
-                <h2 className="section-title" style={{ margin: 0 }}>
-                  Top Standings
-                </h2>
-                <Link className="action-link" to="/standings">
-                  Full table →
-                </Link>
+                <h2 className="section-title" style={{ margin: 0 }}>{t("home.topStandings", "Top Standings")}</h2>
+                <Link className="action-link" to="/standings">{t("home.fullTable", "Full table")} →</Link>
               </div>
 
               {!standings.length ? (
-                <div className="empty-state">No standings found.</div>
+                <div className="empty-state">{t("home.noStandingsFound", "No standings found.")}</div>
               ) : (
                 <div className="table-wrap">
                   <table className="standings-table">
                     <thead>
                       <tr>
                         <th>#</th>
-                        <th>Team</th>
+                        <th>{t("home.team", "Team")}</th>
                         <th>P</th>
                         <th>Pts</th>
                       </tr>
@@ -436,11 +500,7 @@ export default function HomePage() {
                           <td>{row.position}</td>
                           <td>
                             <div className="standings-team-wrap">
-                              <TeamLogo
-                                name={row.teamName}
-                                logoUrl={row.teamLogoUrl}
-                                size="sm"
-                              />
+                              <TeamLogo name={row.teamName} logoUrl={row.teamLogoUrl} size="sm" />
                               <span className="team-cell">{row.teamName}</span>
                             </div>
                           </td>
@@ -455,10 +515,7 @@ export default function HomePage() {
 
               {selectedSeason ? (
                 <p className="results-count" style={{ marginTop: "14px", marginBottom: 0 }}>
-                  Season:{" "}
-                  {selectedSeason.tournamentName
-                    ? `${selectedSeason.tournamentName} • ${selectedSeason.name}`
-                    : selectedSeason.name}
+                  {t("home.season", "Season")}: {selectedSeason.tournamentName ? `${selectedSeason.tournamentName} • ${selectedSeason.name}` : selectedSeason.name}
                 </p>
               ) : null}
             </div>
@@ -466,16 +523,12 @@ export default function HomePage() {
 
           <div className="card" style={{ marginTop: "22px" }}>
             <div className="section-header-row">
-              <h2 className="section-title" style={{ margin: 0 }}>
-                Featured Teams
-              </h2>
-              <Link className="action-link" to="/teams">
-                All teams →
-              </Link>
+              <h2 className="section-title" style={{ margin: 0 }}>{t("home.featuredTeams", "Featured Teams")}</h2>
+              <Link className="action-link" to="/teams">{t("home.allTeams", "All teams")} →</Link>
             </div>
 
             {!featuredTeams.length ? (
-              <div className="empty-state">No featured teams found.</div>
+              <div className="empty-state">{t("home.noFeaturedTeams", "No featured teams found.")}</div>
             ) : (
               <div className="grid grid-2">
                 {featuredTeams.map((team) => {
@@ -485,47 +538,24 @@ export default function HomePage() {
                     <div className="featured-team-card" key={team.teamId}>
                       <div className="featured-team-top">
                         <div className="standings-team-wrap">
-                          <TeamLogo
-                            name={team.teamName}
-                            logoUrl={team.teamLogoUrl}
-                            size="sm"
-                          />
+                          <TeamLogo name={team.teamName} logoUrl={team.teamLogoUrl} size="sm" />
                           <div>
                             <div className="mini-info-title">{team.teamName}</div>
-                            <div className="mini-info-text">
-                              Position #{team.position}
-                            </div>
+                            <div className="mini-info-text">{t("home.position", "Position")} #{team.position}</div>
                           </div>
                         </div>
 
-                        <div className="featured-team-points">{team.points} pts</div>
+                        <div className="featured-team-points">{team.points} {t("home.pts", "pts")}</div>
                       </div>
 
                       <div className="featured-team-stats">
-                        <div className="featured-team-stat">
-                          <span>Wins</span>
-                          <strong>{team.wins}</strong>
-                        </div>
-
-                        <div className="featured-team-stat">
-                          <span>GD</span>
-                          <strong>{team.goalDifference}</strong>
-                        </div>
-
-                        <div className="featured-team-stat">
-                          <span>Win rate</span>
-                          <strong>{stats ? `${stats.winRate}%` : "-"}</strong>
-                        </div>
-
-                        <div className="featured-team-stat">
-                          <span>Goals</span>
-                          <strong>{stats ? stats.goalsFor : "-"}</strong>
-                        </div>
+                        <div className="featured-team-stat"><span>{t("home.wins", "Wins")}</span><strong>{team.wins}</strong></div>
+                        <div className="featured-team-stat"><span>GD</span><strong>{team.goalDifference}</strong></div>
+                        <div className="featured-team-stat"><span>{t("home.winRate", "Win rate")}</span><strong>{stats ? `${stats.winRate}%` : "-"}</strong></div>
+                        <div className="featured-team-stat"><span>{t("home.goals", "Goals")}</span><strong>{stats ? stats.goalsFor : "-"}</strong></div>
                       </div>
 
-                      <Link className="action-link" to={`/teams/${team.teamId}`}>
-                        Open team →
-                      </Link>
+                      <Link className="action-link" to={`/teams/${team.teamId}`}>{t("home.openTeam", "Open team")} →</Link>
                     </div>
                   );
                 })}
@@ -535,78 +565,66 @@ export default function HomePage() {
         </>
       )}
 
-      <div className="grid grid-3" style={{ marginTop: "22px" }}>
-        <div className="card">
+      <div className="home-match-shell" style={{ marginTop: "22px" }}>
+        <div className="card home-match-primary">
           <div className="section-header-row">
-            <h2 className="section-title" style={{ margin: 0 }}>
-              Live Now
-            </h2>
-            <Link className="action-link" to="/matches">
-              Open →
-            </Link>
+            <h2 className="section-title" style={{ margin: 0 }}>{t("home.liveNowTitle", "Live Now")}</h2>
+            <Link className="action-link" to="/matches">{t("common.open", "Open")} →</Link>
           </div>
 
-          {!liveMatches.length ? (
-            <div className="empty-state">No live matches right now.</div>
+          {!liveMatchesPreview.length ? (
+            <div className="empty-state">{t("home.noLiveNow", "No live matches right now.")}</div>
           ) : (
             <div className="grid" style={{ gap: "12px" }}>
-              {liveMatches.map(renderMiniMatch)}
+              {liveMatchesPreview.map(renderMiniMatch)}
             </div>
           )}
         </div>
 
-        <div className="card">
-          <div className="section-header-row">
-            <h2 className="section-title" style={{ margin: 0 }}>
-              Upcoming
-            </h2>
-            <Link className="action-link" to="/matches">
-              Open →
-            </Link>
+        <div className="home-match-secondary">
+          <div className="card">
+            <div className="section-header-row">
+              <h2 className="section-title" style={{ margin: 0 }}>{t("common.upcoming", "Upcoming")}</h2>
+              <Link className="action-link" to="/matches">{t("common.open", "Open")} →</Link>
+            </div>
+
+            {!upcomingMatchesPreview.length ? (
+              <div className="empty-state">{t("home.noUpcoming", "No upcoming matches.")}</div>
+            ) : (
+              <div className="grid" style={{ gap: "12px" }}>
+                {upcomingMatchesPreview.map(renderMiniMatch)}
+              </div>
+            )}
           </div>
 
-          {!upcomingMatches.length ? (
-            <div className="empty-state">No upcoming matches.</div>
-          ) : (
-            <div className="grid" style={{ gap: "12px" }}>
-              {upcomingMatches.map(renderMiniMatch)}
+          <div className="card">
+            <div className="section-header-row">
+              <h2 className="section-title" style={{ margin: 0 }}>{t("home.latestResults", "Latest Results")}</h2>
+              <Link className="action-link" to="/matches">{t("common.open", "Open")} →</Link>
             </div>
-          )}
-        </div>
 
-        <div className="card">
-          <div className="section-header-row">
-            <h2 className="section-title" style={{ margin: 0 }}>
-              Latest Results
-            </h2>
-            <Link className="action-link" to="/matches">
-              Open →
-            </Link>
+            {!finishedMatchesPreview.length ? (
+              <div className="empty-state">{t("home.noFinishedYet", "No finished matches yet.")}</div>
+            ) : (
+              <div className="grid" style={{ gap: "12px" }}>
+                {finishedMatchesPreview.map(renderMiniMatch)}
+              </div>
+            )}
           </div>
-
-          {!finishedMatches.length ? (
-            <div className="empty-state">No finished matches yet.</div>
-          ) : (
-            <div className="grid" style={{ gap: "12px" }}>
-              {finishedMatches.map(renderMiniMatch)}
-            </div>
-          )}
         </div>
       </div>
 
       <div className="grid grid-2" style={{ marginTop: "22px" }}>
         <div className="card">
-          <h2 className="section-title">Available Seasons</h2>
+          <h2 className="section-title">{t("home.availableSeasons", "Available Seasons")}</h2>
 
           {!seasons.length ? (
-            <div className="empty-state">No seasons found.</div>
+            <div className="empty-state">{t("home.noSeasons", "No seasons found.")}</div>
           ) : (
             <div className="season-pills">
               {seasons.map((season) => (
                 <div key={season.id} className="season-pill">
-                  <div className="mini-info-title">
-                    {season.tournamentName || "Tournament"}
-                  </div>
+                  <div className="mini-info-title">{season.tournamentName || t("home.tournament", "Tournament")}</div>
                   <div className="mini-info-text">{season.name}</div>
                 </div>
               ))}
@@ -615,28 +633,22 @@ export default function HomePage() {
         </div>
 
         <div className="card">
-          <h2 className="section-title">Quick Navigation</h2>
+          <h2 className="section-title">{t("home.quickNavigation", "Quick Navigation")}</h2>
 
           <div className="grid" style={{ gap: "12px" }}>
             <Link to="/teams" className="mini-info-card">
-              <div className="mini-info-title">Teams</div>
-              <div className="mini-info-text">
-                Перегляд команд, деталей і recent form.
-              </div>
+              <div className="mini-info-title">{t("header.teams", "Teams")}</div>
+              <div className="mini-info-text">{t("home.browseTeams", "Browse teams, details and recent form.")}</div>
             </Link>
 
             <Link to="/matches" className="mini-info-card">
-              <div className="mini-info-title">Matches</div>
-              <div className="mini-info-text">
-                Список матчів з фільтрами, деталями і favorites.
-              </div>
+              <div className="mini-info-title">{t("header.matches", "Matches")}</div>
+              <div className="mini-info-text">{t("home.browseMatches", "Match list with filters, details and favorites.")}</div>
             </Link>
 
             <Link to="/favorites" className="mini-info-card">
-              <div className="mini-info-title">Favorites</div>
-              <div className="mini-info-text">
-                Улюблені команди та матчі поточного користувача.
-              </div>
+              <div className="mini-info-title">{t("header.favorites", "Favorites")}</div>
+              <div className="mini-info-text">{t("home.browseFavorites", "Favorite teams and matches for current user.")}</div>
             </Link>
           </div>
         </div>

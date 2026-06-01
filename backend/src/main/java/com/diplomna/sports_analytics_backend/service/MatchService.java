@@ -4,6 +4,7 @@ import com.diplomna.sports_analytics_backend.dto.response.MatchResponse;
 import com.diplomna.sports_analytics_backend.entity.Match;
 import com.diplomna.sports_analytics_backend.entity.MatchStatus;
 import com.diplomna.sports_analytics_backend.repository.MatchRepository;
+import com.diplomna.sports_analytics_backend.util.TeamNameSanitizer;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -39,7 +40,7 @@ public class MatchService {
     }
 
     public List<MatchResponse> getRecentMatchesByTeamId(Long teamId) {
-        return matchRepository.findRecentFinishedMatchesByTeamId(teamId)
+        return matchRepository.findRecentMatchesByTeamId(teamId)
                 .stream()
                 .limit(5)
                 .map(this::toResponse)
@@ -80,10 +81,10 @@ public class MatchService {
                 .tournamentName(match.getSeason().getTournament().getName())
                 .seasonName(match.getSeason().getName())
                 .homeTeamId(match.getHomeTeam().getId())
-                .homeTeamName(match.getHomeTeam().getName())
+                .homeTeamName(TeamNameSanitizer.sanitizeDisplayName(match.getHomeTeam().getName()))
                 .homeTeamLogoUrl(match.getHomeTeam().getLogoUrl())
                 .awayTeamId(match.getAwayTeam().getId())
-                .awayTeamName(match.getAwayTeam().getName())
+                .awayTeamName(TeamNameSanitizer.sanitizeDisplayName(match.getAwayTeam().getName()))
                 .awayTeamLogoUrl(match.getAwayTeam().getLogoUrl())
                 .build();
     }

@@ -12,6 +12,7 @@ import com.diplomna.sports_analytics_backend.repository.FavoriteTeamRepository;
 import com.diplomna.sports_analytics_backend.repository.MatchRepository;
 import com.diplomna.sports_analytics_backend.repository.TeamRepository;
 import com.diplomna.sports_analytics_backend.repository.UserRepository;
+import com.diplomna.sports_analytics_backend.util.TeamNameSanitizer;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -103,12 +104,18 @@ public class FavoriteService {
 
     private FavoriteTeamResponse toTeamResponse(FavoriteTeam favoriteTeam) {
         Team team = favoriteTeam.getTeam();
+        String displayName = TeamNameSanitizer.sanitizeDisplayName(team.getName());
+        String displayShortName = TeamNameSanitizer.buildShortName(
+                team.getShortName() != null && !team.getShortName().isBlank()
+                        ? team.getShortName()
+                        : displayName
+        );
 
         return FavoriteTeamResponse.builder()
                 .favoriteId(favoriteTeam.getId())
                 .teamId(team.getId())
-                .name(team.getName())
-                .shortName(team.getShortName())
+                .name(displayName)
+                .shortName(displayShortName)
                 .country(team.getCountry())
                 .foundedYear(team.getFoundedYear())
                 .build();
@@ -120,8 +127,8 @@ public class FavoriteService {
         return FavoriteMatchResponse.builder()
                 .favoriteId(favoriteMatch.getId())
                 .matchId(match.getId())
-                .homeTeamName(match.getHomeTeam().getName())
-                .awayTeamName(match.getAwayTeam().getName())
+                .homeTeamName(TeamNameSanitizer.sanitizeDisplayName(match.getHomeTeam().getName()))
+                .awayTeamName(TeamNameSanitizer.sanitizeDisplayName(match.getAwayTeam().getName()))
                 .tournamentName(match.getSeason().getTournament().getName())
                 .seasonName(match.getSeason().getName())
                 .scheduledAt(match.getScheduledAt())

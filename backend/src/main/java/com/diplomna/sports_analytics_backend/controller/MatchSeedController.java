@@ -15,4 +15,9 @@ public class MatchSeedController {
     public String seedFixtures(@RequestParam Long seasonId) {
         return matchSeedService.seedFixtures(seasonId);
     }
+
+    @DeleteMapping("/demo-fixtures")
+    public String clearDemoFixtures() {
+        return matchSeedService.clearDemoFixtures();
+    }
 }

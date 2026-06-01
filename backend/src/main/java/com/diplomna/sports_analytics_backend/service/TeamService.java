@@ -3,6 +3,7 @@ package com.diplomna.sports_analytics_backend.service;
 import com.diplomna.sports_analytics_backend.dto.response.TeamResponse;
 import com.diplomna.sports_analytics_backend.entity.Team;
 import com.diplomna.sports_analytics_backend.repository.TeamRepository;
+import com.diplomna.sports_analytics_backend.util.TeamNameSanitizer;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -44,10 +45,17 @@ public class TeamService {
     }
 
     private TeamResponse toResponse(Team team) {
+        String displayName = TeamNameSanitizer.sanitizeDisplayName(team.getName());
+        String displayShortName = TeamNameSanitizer.buildShortName(
+                team.getShortName() != null && !team.getShortName().isBlank()
+                        ? team.getShortName()
+                        : displayName
+        );
+
         return TeamResponse.builder()
                 .id(team.getId())
-                .name(team.getName())
-                .shortName(team.getShortName())
+                .name(displayName)
+                .shortName(displayShortName)
                 .country(team.getCountry())
                 .logoUrl(team.getLogoUrl())
                 .description(team.getDescription())

@@ -42,7 +42,7 @@ public class DashboardService {
                 .count();
 
         List<MatchResponse> recentMatches = allMatches.stream()
-                .limit(4)
+                .limit(60)
                 .map(this::toMatchResponse)
                 .toList();
 

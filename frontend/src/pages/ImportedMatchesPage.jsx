@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import TeamLogo from "../components/common/TeamLogo";
 import { fetchJson, postRequest } from "../api/client";
+import { useLanguage } from "../context/LanguageContext";
 
 const COMPETITIONS = [
   { code: "PL", label: "Premier League" },
@@ -11,6 +12,7 @@ const COMPETITIONS = [
 ];
 
 export default function ImportedMatchesPage() {
+  const { t } = useLanguage();
   const [competitionCode, setCompetitionCode] = useState("PL");
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,14 +27,11 @@ export default function ImportedMatchesPage() {
   async function loadImportedMatches() {
     setLoading(true);
     setError("");
-
     try {
-      const data = await fetchJson(
-        `/external/football/imported-matches?competitionCode=${competitionCode}`
-      );
-      setMatches(data);
+      const data = await fetchJson(`/external/football/imported-matches?competitionCode=${competitionCode}`);
+      setMatches(Array.isArray(data) ? data : []);
     } catch {
-      setError("Failed to load imported matches.");
+      setError(t("external.errorImported", "Failed to load imported matches."));
     } finally {
       setLoading(false);
     }
@@ -42,19 +41,15 @@ export default function ImportedMatchesPage() {
     setImportLoading(true);
     setError("");
     setMessage("");
-
     try {
-      const result = await postRequest(
-        `/external/football/competitions/${competitionCode}/import`
-      );
-
+      const result = await postRequest(`/external/football/competitions/${competitionCode}/import`);
       setMessage(
-        `Import completed. Imported: ${result.importedCount}, updated: ${result.updatedCount}, total: ${result.totalCount}.`
+        t("external.importDone", "Import completed.") +
+          ` ${t("external.imported", "Imported")}: ${result.importedCount}, ${t("external.updated", "updated")}: ${result.updatedCount}, ${t("external.total", "total")}: ${result.totalCount}.`
       );
-
       await loadImportedMatches();
     } catch {
-      setError("Failed to import matches into database.");
+      setError(t("external.errorImport", "Failed to import matches into database."));
     } finally {
       setImportLoading(false);
     }
@@ -69,20 +64,13 @@ export default function ImportedMatchesPage() {
   return (
     <div>
       <div className="page-header">
-        <span className="page-kicker">Imported Data</span>
-        <h1 className="page-title">Imported Matches</h1>
-        <p className="page-subtitle">
-          Матчі, які вже збережені у твоїй власній базі даних після імпорту із
-          football-data.org.
-        </p>
+        <span className="page-kicker">{t("external.importedKicker", "Imported Data")}</span>
+        <h1 className="page-title">{t("external.importedTitle", "Imported Matches")}</h1>
+        <p className="page-subtitle">{t("external.importedSubtitle", "Matches already saved in your database after import from external provider.")}</p>
       </div>
 
       <div className="filters-bar">
-        <select
-          className="filter-select"
-          value={competitionCode}
-          onChange={(event) => setCompetitionCode(event.target.value)}
-        >
+        <select className="filter-select" value={competitionCode} onChange={(event) => setCompetitionCode(event.target.value)}>
           {COMPETITIONS.map((competition) => (
             <option key={competition.code} value={competition.code}>
               {competition.label}
@@ -90,30 +78,18 @@ export default function ImportedMatchesPage() {
           ))}
         </select>
 
-        <button
-          type="button"
-          className="hero-button hero-button-primary"
-          onClick={handleImport}
-          disabled={importLoading}
-        >
-          {importLoading ? "Importing..." : "Import to DB"}
+        <button type="button" className="hero-button hero-button-primary" onClick={handleImport} disabled={importLoading}>
+          {importLoading ? t("external.importing", "Importing...") : t("external.importToDb", "Import to DB")}
         </button>
       </div>
 
-      {message ? (
-        <div className="loading-state" style={{ marginBottom: "18px" }}>
-          {message}
-        </div>
-      ) : null}
-
-      {loading ? <div className="loading-state">Loading imported matches...</div> : null}
+      {message ? <div className="loading-state" style={{ marginBottom: "18px" }}>{message}</div> : null}
+      {loading ? <div className="loading-state">{t("external.loadingImported", "Loading imported matches...")}</div> : null}
       {error ? <div className="error-state">{error}</div> : null}
 
       {!loading && !error ? (
         !matches.length ? (
-          <div className="empty-state">
-            No imported matches found for this competition yet.
-          </div>
+          <div className="empty-state">{t("external.noImported", "No imported matches found for this competition yet.")}</div>
         ) : (
           <div className="grid grid-2">
             {matches.map((match) => (
@@ -124,7 +100,7 @@ export default function ImportedMatchesPage() {
                       <TeamLogo name={match.homeTeamName} size="sm" />
                       <div className="team-inline-text">
                         <div className="team-inline-name">{match.homeTeamName}</div>
-                        <div className="team-inline-subtitle">Home</div>
+                        <div className="team-inline-subtitle">{t("common.home", "Home")}</div>
                       </div>
                     </div>
 
@@ -132,34 +108,21 @@ export default function ImportedMatchesPage() {
                       <TeamLogo name={match.awayTeamName} size="sm" />
                       <div className="team-inline-text">
                         <div className="team-inline-name">{match.awayTeamName}</div>
-                        <div className="team-inline-subtitle">Away</div>
+                        <div className="team-inline-subtitle">{t("common.away", "Away")}</div>
                       </div>
                     </div>
                   </div>
 
                   <div style={{ textAlign: "right" }}>
-                    <div
-                      className="score-value"
-                      style={{ fontSize: "28px", marginBottom: "8px" }}
-                    >
+                    <div className="score-value" style={{ fontSize: "28px", marginBottom: "8px" }}>
                       {match.homeScore ?? "-"} : {match.awayScore ?? "-"}
                     </div>
-
-                    <span className={getStatusClass(match.status)}>
-                      {match.status}
-                    </span>
+                    <span className={getStatusClass(match.status)}>{match.status}</span>
                   </div>
                 </div>
 
-                <p className="card-muted" style={{ marginTop: "14px" }}>
-                  {match.competitionName || match.competitionCode}
-                </p>
-
-                <p className="card-muted">
-                  {match.utcDate
-                    ? new Date(match.utcDate).toLocaleString()
-                    : "Date not available"}
-                </p>
+                <p className="card-muted" style={{ marginTop: "14px" }}>{match.competitionName || match.competitionCode}</p>
+                <p className="card-muted">{match.utcDate ? new Date(match.utcDate).toLocaleString() : t("external.noDate", "Date not available")}</p>
               </div>
             ))}
           </div>

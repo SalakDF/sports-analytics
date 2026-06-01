@@ -6,6 +6,7 @@ import com.diplomna.sports_analytics_backend.dto.response.ExternalMatchSyncResul
 import com.diplomna.sports_analytics_backend.dto.response.ExternalStandingsResponse;
 import com.diplomna.sports_analytics_backend.dto.response.ExternalTeamImportResultResponse;
 import com.diplomna.sports_analytics_backend.dto.response.ImportResultResponse;
+import com.diplomna.sports_analytics_backend.dto.response.TeamNameCleanupResponse;
 import com.diplomna.sports_analytics_backend.integration.FootballDataClient;
 import com.diplomna.sports_analytics_backend.service.ExternalFootballService;
 import com.diplomna.sports_analytics_backend.service.ExternalImportService;
@@ -60,6 +61,11 @@ public class ExternalFootballController {
     @PostMapping("/competitions/{code}/import-teams")
     public ExternalTeamImportResultResponse importMissingTeams(@PathVariable String code) {
         return externalTeamImportService.importMissingTeams(code);
+    }
+
+    @PostMapping("/teams/cleanup-names")
+    public TeamNameCleanupResponse cleanupTeamNames() {
+        return externalTeamImportService.cleanupAllTeamNames();
     }
 
     @GetMapping("/imported-matches")

@@ -2,9 +2,11 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { postJson } from "../api/client";
 import { saveCurrentUser } from "../utils/session";
+import { useLanguage } from "../context/LanguageContext";
 
 export default function AuthPage() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
@@ -27,15 +29,13 @@ export default function AuthPage() {
 
       setMessage(
         mode === "login"
-          ? "Login successful."
-          : "Registration successful."
+          ? t("auth.loginSuccess", "Login successful.")
+          : t("auth.registerSuccess", "Registration successful.")
       );
 
-      setTimeout(() => {
-        navigate("/");
-      }, 400);
+      setTimeout(() => navigate("/"), 400);
     } catch {
-      setError("Failed to complete authentication request.");
+      setError(t("auth.error", "Failed to complete authentication request."));
     } finally {
       setLoading(false);
     }
@@ -44,54 +44,43 @@ export default function AuthPage() {
   return (
     <div>
       <div className="page-header">
-        <span className="page-kicker">Account</span>
-        <h1 className="page-title">Authentication</h1>
-        <p className="page-subtitle">
-          Увійди в систему або створи акаунт, щоб працювати з favorites і
-          персональним сценарієм користування.
-        </p>
+        <span className="page-kicker">{t("auth.kicker", "Account")}</span>
+        <h1 className="page-title">{t("auth.title", "Authentication")}</h1>
       </div>
 
       <div className="auth-layout auth-layout-premium">
         <div className="card auth-card auth-card-premium">
           <div className="auth-card-top">
             <span className="page-kicker">
-              {mode === "login" ? "Welcome back" : "Create account"}
+              {mode === "login" ? t("auth.welcomeBack", "Welcome back") : t("auth.createAccount", "Create account")}
             </span>
             <h2 className="section-title" style={{ margin: 0 }}>
-              {mode === "login" ? "Sign in to continue" : "Start using the platform"}
+              {mode === "login"
+                ? t("auth.signInContinue", "Sign in to continue")
+                : t("auth.startPlatform", "Start using the platform")}
             </h2>
           </div>
 
           <div className="auth-switcher">
             <button
               type="button"
-              className={
-                mode === "login"
-                  ? "hero-button hero-button-primary"
-                  : "hero-button hero-button-secondary"
-              }
+              className={mode === "login" ? "hero-button hero-button-primary" : "hero-button hero-button-secondary"}
               onClick={() => setMode("login")}
             >
-              Login
+              {t("auth.login", "Login")}
             </button>
-
             <button
               type="button"
-              className={
-                mode === "register"
-                  ? "hero-button hero-button-primary"
-                  : "hero-button hero-button-secondary"
-              }
+              className={mode === "register" ? "hero-button hero-button-primary" : "hero-button hero-button-secondary"}
               onClick={() => setMode("register")}
             >
-              Register
+              {t("auth.register", "Register")}
             </button>
           </div>
 
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-group">
-              <label className="form-label">Email</label>
+              <label className="form-label">{t("auth.email", "Email")}</label>
               <input
                 className="search-input"
                 type="email"
@@ -101,66 +90,24 @@ export default function AuthPage() {
                 required
               />
             </div>
-
             <div className="form-group">
-              <label className="form-label">Password</label>
+              <label className="form-label">{t("auth.password", "Password")}</label>
               <input
                 className="search-input"
                 type="password"
-                placeholder="Minimum 6 characters"
+                placeholder={t("auth.passwordPlaceholder", "Minimum 6 characters")}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 required
               />
             </div>
-
-            <button
-              type="submit"
-              className="hero-button hero-button-primary auth-submit-button"
-              disabled={loading}
-            >
-              {loading ? "Please wait..." : mode === "login" ? "Login" : "Register"}
+            <button type="submit" className="hero-button hero-button-primary auth-submit-button" disabled={loading}>
+              {loading ? t("auth.pleaseWait", "Please wait...") : mode === "login" ? t("auth.login", "Login") : t("auth.register", "Register")}
             </button>
           </form>
 
-          {message ? (
-            <div className="loading-state" style={{ marginTop: "16px" }}>
-              {message}
-            </div>
-          ) : null}
-
-          {error ? (
-            <div className="error-state" style={{ marginTop: "16px" }}>
-              {error}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="card auth-info-card auth-info-card-premium">
-          <h2 className="section-title">What you get</h2>
-
-          <div className="grid" style={{ gap: "12px" }}>
-            <div className="mini-info-card auth-feature-card">
-              <div className="mini-info-title">Favorites</div>
-              <div className="mini-info-text">
-                Збереження улюблених команд і матчів у власному профілі.
-              </div>
-            </div>
-
-            <div className="mini-info-card auth-feature-card">
-              <div className="mini-info-title">Quick access</div>
-              <div className="mini-info-text">
-                Швидкий доступ до обраного прямо з основного меню.
-              </div>
-            </div>
-
-            <div className="mini-info-card auth-feature-card">
-              <div className="mini-info-title">Personal flow</div>
-              <div className="mini-info-text">
-                Авторизація дає персоналізований сценарій користування системою.
-              </div>
-            </div>
-          </div>
+          {message ? <div className="loading-state" style={{ marginTop: "16px" }}>{message}</div> : null}
+          {error ? <div className="error-state" style={{ marginTop: "16px" }}>{error}</div> : null}
         </div>
       </div>
     </div>

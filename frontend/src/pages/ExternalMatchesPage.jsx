@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import TeamLogo from "../components/common/TeamLogo";
 import { fetchJson } from "../api/client";
+import { useLanguage } from "../context/LanguageContext";
 
 const COMPETITIONS = [
   { code: "PL", label: "Premier League" },
@@ -11,126 +12,45 @@ const COMPETITIONS = [
 ];
 
 export default function ExternalMatchesPage() {
+  const { t } = useLanguage();
   const [competitionCode, setCompetitionCode] = useState("PL");
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    loadExternalMatches();
-  }, [competitionCode]);
-
+  useEffect(() => { loadExternalMatches(); }, [competitionCode]);
   async function loadExternalMatches() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const data = await fetchJson(
-        `/external/football/competitions/${competitionCode}/matches/simple`
-      );
-      setMatches(data);
-    } catch {
-      setError("Failed to load external matches.");
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true); setError("");
+    try { setMatches(await fetchJson(`/external/football/competitions/${competitionCode}/matches/simple`)); }
+    catch { setError(t("external.errorMatches", "Failed to load external matches.")); }
+    finally { setLoading(false); }
   }
-
-  function getStatusClass(status) {
-    if (status === "IN_PLAY") return "badge badge-live";
-    if (status === "FINISHED") return "badge badge-finished";
-    return "badge badge-scheduled";
-  }
-
-  const competitionName =
-    matches[0]?.competitionName ||
-    COMPETITIONS.find((item) => item.code === competitionCode)?.label ||
-    competitionCode;
 
   return (
     <div>
-      <div className="page-header">
-        <span className="page-kicker">External API</span>
-        <h1 className="page-title">World Football Matches</h1>
-        <p className="page-subtitle">
-          Реальні матчі із football-data.org, підключені через зовнішній backend
-          endpoint.
-        </p>
-      </div>
-
+      <div className="page-header"><span className="page-kicker">{t("external.kicker", "External API")}</span><h1 className="page-title">{t("external.matchesTitle", "World Football Matches")}</h1></div>
       <div className="filters-bar">
-        <select
-          className="filter-select"
-          value={competitionCode}
-          onChange={(event) => setCompetitionCode(event.target.value)}
-        >
-          {COMPETITIONS.map((competition) => (
-            <option key={competition.code} value={competition.code}>
-              {competition.label}
-            </option>
-          ))}
+        <select className="filter-select" value={competitionCode} onChange={(e) => setCompetitionCode(e.target.value)}>
+          {COMPETITIONS.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
         </select>
       </div>
-
-      <p className="results-count">Competition: {competitionName}</p>
-
-      {loading ? <div className="loading-state">Loading external matches...</div> : null}
+      {loading ? <div className="loading-state">{t("external.loadingMatches", "Loading external matches...")}</div> : null}
       {error ? <div className="error-state">{error}</div> : null}
-
-      {!loading && !error ? (
-        !matches.length ? (
-          <div className="empty-state">No external matches found.</div>
-        ) : (
-          <div className="grid grid-2">
-            {matches.map((match) => (
-              <div className="card" key={match.id}>
-                <div className="match-card-header">
-                  <div className="match-teams-stack">
-                    <div className="team-inline">
-                      <TeamLogo name={match.homeTeamName} size="sm" />
-                      <div className="team-inline-text">
-                        <div className="team-inline-name">{match.homeTeamName}</div>
-                        <div className="team-inline-subtitle">Home</div>
-                      </div>
-                    </div>
-
-                    <div className="team-inline">
-                      <TeamLogo name={match.awayTeamName} size="sm" />
-                      <div className="team-inline-text">
-                        <div className="team-inline-name">{match.awayTeamName}</div>
-                        <div className="team-inline-subtitle">Away</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ textAlign: "right" }}>
-                    <div
-                      className="score-value"
-                      style={{ fontSize: "28px", marginBottom: "8px" }}
-                    >
-                      {match.homeScore ?? "-"} : {match.awayScore ?? "-"}
-                    </div>
-
-                    <span className={getStatusClass(match.status)}>
-                      {match.status}
-                    </span>
-                  </div>
+      {!loading && !error ? (!matches.length ? <div className="empty-state">{t("external.noMatches", "No external matches found.")}</div> : (
+        <div className="grid grid-2">
+          {matches.map((m) => (
+            <div className="card" key={m.id}>
+              <div className="match-card-header">
+                <div className="match-teams-stack">
+                  <div className="team-inline"><TeamLogo name={m.homeTeamName} size="sm" /><div className="team-inline-text"><div className="team-inline-name">{m.homeTeamName}</div></div></div>
+                  <div className="team-inline"><TeamLogo name={m.awayTeamName} size="sm" /><div className="team-inline-text"><div className="team-inline-name">{m.awayTeamName}</div></div></div>
                 </div>
-
-                <p className="card-muted" style={{ marginTop: "14px" }}>
-                  {match.competitionName || match.competitionCode}
-                </p>
-
-                <p className="card-muted">
-                  {match.utcDate
-                    ? new Date(match.utcDate).toLocaleString()
-                    : "Date not available"}
-                </p>
+                <div className="score-value" style={{ fontSize: "28px" }}>{m.homeScore ?? "-"} : {m.awayScore ?? "-"}</div>
               </div>
-            ))}
-          </div>
-        )
-      ) : null}
+            </div>
+          ))}
+        </div>
+      )) : null}
     </div>
   );
 }

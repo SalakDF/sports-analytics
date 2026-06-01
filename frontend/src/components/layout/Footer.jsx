@@ -1,5 +1,8 @@
+import { useLanguage } from "../../context/LanguageContext";
+
 export default function Footer() {
   const year = new Date().getFullYear();
+  const { t } = useLanguage();
 
   return (
     <footer className="site-footer">
@@ -7,8 +10,10 @@ export default function Footer() {
         <div>
           <div className="site-footer-brand">Sports Analytics</div>
           <p className="site-footer-text">
-            Вебзастосунок для спортивних любителів із матчами, командами,
-            турнірними таблицями, favorites і зовнішньою інтеграцією даних.
+            {t(
+              "footer.description",
+              "Sports web app with matches, teams, standings, favorites and external data integration."
+            )}
           </p>
         </div>
 

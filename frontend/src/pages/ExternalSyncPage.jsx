@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { fetchJson, postJson, postRequest } from "../api/client";
+import { useLanguage } from "../context/LanguageContext";
 
 const COMPETITIONS = [
   { code: "PL", label: "Premier League" },
@@ -10,6 +11,7 @@ const COMPETITIONS = [
 ];
 
 export default function ExternalSyncPage() {
+  const { t } = useLanguage();
   const [competitionCode, setCompetitionCode] = useState("PL");
   const [seasons, setSeasons] = useState([]);
   const [mappings, setMappings] = useState([]);
@@ -21,246 +23,93 @@ export default function ExternalSyncPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   async function loadData() {
-    setLoading(true);
-    setError("");
-
+    setLoading(true); setError("");
     try {
-      const [seasonsData, mappingsData, competitionMappingsData] =
-        await Promise.all([
-          fetchJson("/seasons"),
-          fetchJson("/external/football/team-mappings"),
-          fetchJson("/external/football/competition-mappings"),
-        ]);
-
+      const [seasonsData, mappingsData, competitionMappingsData] = await Promise.all([
+        fetchJson("/seasons"),
+        fetchJson("/external/football/team-mappings"),
+        fetchJson("/external/football/competition-mappings"),
+      ]);
       setSeasons(seasonsData);
       setMappings(mappingsData);
       setCompetitionMappings(competitionMappingsData);
-
-      if (seasonsData.length > 0) {
-        setManualSeasonId(String(seasonsData[0].id));
-      }
+      if (seasonsData.length > 0) setManualSeasonId(String(seasonsData[0].id));
     } catch {
-      setError("Failed to load sync data.");
-    } finally {
-      setLoading(false);
-    }
+      setError(t("external.errorSyncData", "Failed to load sync data."));
+    } finally { setLoading(false); }
   }
 
-  const selectedCompetitionMapping = useMemo(() => {
-    return competitionMappings.find(
-      (item) => String(item.externalCompetitionCode) === String(competitionCode)
-    );
-  }, [competitionMappings, competitionCode]);
+  const selectedCompetitionMapping = useMemo(
+    () => competitionMappings.find((item) => String(item.externalCompetitionCode) === String(competitionCode)),
+    [competitionMappings, competitionCode]
+  );
 
   const selectedSeason = useMemo(() => {
-    const resolvedSeasonId =
-      selectedCompetitionMapping?.internalSeasonId || manualSeasonId;
-
+    const resolvedSeasonId = selectedCompetitionMapping?.internalSeasonId || manualSeasonId;
     return seasons.find((item) => String(item.id) === String(resolvedSeasonId));
   }, [seasons, manualSeasonId, selectedCompetitionMapping]);
 
   async function handleSync() {
-    setSyncLoading(true);
-    setError("");
-    setMessage("");
-
+    setSyncLoading(true); setError(""); setMessage("");
     try {
-      const payload = {
-        competitionCode,
-      };
-
-      if (!selectedCompetitionMapping && manualSeasonId) {
-        payload.seasonId = Number(manualSeasonId);
-      }
-
+      const payload = { competitionCode };
+      if (!selectedCompetitionMapping && manualSeasonId) payload.seasonId = Number(manualSeasonId);
       const result = await postJson("/external/football/sync-matches", payload);
-
-      setMessage(
-        `Sync completed. External refreshed: ${result.refreshedExternalCount}, created internal: ${result.createdInternalCount}, updated internal: ${result.updatedInternalCount}, skipped: ${result.skippedCount}, seasonId: ${result.seasonId}.`
-      );
+      setMessage(`${t("external.syncDone", "Sync completed")}. ${t("external.refreshed", "refreshed")}: ${result.refreshedExternalCount}, ${t("external.created", "created")}: ${result.createdInternalCount}, ${t("external.updated", "updated")}: ${result.updatedInternalCount}, ${t("external.skipped", "skipped")}: ${result.skippedCount}.`);
     } catch {
-      setError("Failed to sync external matches into internal Match table.");
-    } finally {
-      setSyncLoading(false);
-    }
+      setError(t("external.errorSync", "Failed to sync external matches."));
+    } finally { setSyncLoading(false); }
   }
 
   async function handleFullSync() {
-    setFullSyncLoading(true);
-    setError("");
-    setMessage("");
-
+    setFullSyncLoading(true); setError(""); setMessage("");
     try {
-      const importTeamsResult = await postRequest(
-        `/external/football/competitions/${competitionCode}/import-teams`
-      );
-
-      const autoMapResult = await postRequest(
-        `/external/football/team-mappings/auto?competitionCode=${competitionCode}`
-      );
-
-      const payload = {
-        competitionCode,
-      };
-
-      if (!selectedCompetitionMapping && manualSeasonId) {
-        payload.seasonId = Number(manualSeasonId);
-      }
-
+      const importTeamsResult = await postRequest(`/external/football/competitions/${competitionCode}/import-teams`);
+      const autoMapResult = await postRequest(`/external/football/team-mappings/auto?competitionCode=${competitionCode}`);
+      const payload = { competitionCode };
+      if (!selectedCompetitionMapping && manualSeasonId) payload.seasonId = Number(manualSeasonId);
       const syncResult = await postJson("/external/football/sync-matches", payload);
-
-      setMessage(
-        `Full sync completed. Teams imported: ${importTeamsResult.createdTeams}, already existing teams: ${importTeamsResult.alreadyExistingTeams}. Auto-mapped: ${autoMapResult.mappedCount}, already mapped: ${autoMapResult.alreadyMappedCount}, skipped mapping: ${autoMapResult.skippedCount}. Matches synced: created ${syncResult.createdInternalCount}, updated ${syncResult.updatedInternalCount}, skipped ${syncResult.skippedCount}.`
-      );
-
+      setMessage(`${t("external.fullSyncDone", "Full sync completed")}. ${t("external.createdTeams", "Created teams")}: ${importTeamsResult.createdTeams}. ${t("external.mapped", "Mapped")}: ${autoMapResult.mappedCount}. ${t("external.createdMatches", "Created matches")}: ${syncResult.createdInternalCount}, ${t("external.updatedMatches", "updated")}: ${syncResult.updatedInternalCount}.`);
       await loadData();
     } catch {
-      setError("Failed to run full sync pipeline.");
-    } finally {
-      setFullSyncLoading(false);
-    }
+      setError(t("external.errorFullSync", "Failed to run full sync pipeline."));
+    } finally { setFullSyncLoading(false); }
   }
 
   return (
     <div>
       <div className="page-header">
-        <span className="page-kicker">Real Sync</span>
-        <h1 className="page-title">External Match Sync</h1>
-        <p className="page-subtitle">
-          Імпорт і синхронізація зовнішніх матчів у внутрішню таблицю Match.
-          Можна запускати звичайний sync або повний pipeline в один клік.
-        </p>
+        <span className="page-kicker">{t("external.realSync", "Real Sync")}</span>
+        <h1 className="page-title">{t("external.syncTitle", "External Match Sync")}</h1>
       </div>
 
       <div className="grid grid-3" style={{ marginBottom: "22px" }}>
-        <div className="card">
-          <h3 className="card-title">Mapped teams</h3>
-          <p className="card-muted">
-            Кількість зовнішніх команд, які вже зв’язані з внутрішніми.
-          </p>
-          <div
-            className="hero-panel-value"
-            style={{ fontSize: "30px", marginBottom: 0 }}
-          >
-            {mappings.length}
-          </div>
-        </div>
-
-        <div className="card">
-          <h3 className="card-title">Competition mapping</h3>
-          <p className="card-muted">
-            Чи має поточна ліга автоматичний зв’язок із внутрішнім сезоном.
-          </p>
-          <div
-            className="hero-panel-value"
-            style={{ fontSize: "24px", marginBottom: 0 }}
-          >
-            {selectedCompetitionMapping ? "Mapped" : "Manual"}
-          </div>
-        </div>
-
-        <div className="card">
-          <h3 className="card-title">Target season</h3>
-          <p className="card-muted">
-            Внутрішній сезон, у який будуть записані матчі.
-          </p>
-          <div
-            className="hero-panel-value"
-            style={{ fontSize: "20px", marginBottom: 0 }}
-          >
-            {selectedSeason
-              ? selectedSeason.tournamentName
-                ? `${selectedSeason.tournamentName} • ${selectedSeason.name}`
-                : selectedSeason.name
-              : "-"}
-          </div>
-        </div>
+        <div className="card"><h3 className="card-title">{t("external.mappedTeams", "Mapped teams")}</h3><div className="hero-panel-value" style={{ fontSize: "30px", marginBottom: 0 }}>{mappings.length}</div></div>
+        <div className="card"><h3 className="card-title">{t("external.competitionMapping", "Competition mapping")}</h3><div className="hero-panel-value" style={{ fontSize: "24px", marginBottom: 0 }}>{selectedCompetitionMapping ? t("external.mapped", "Mapped") : t("external.manual", "Manual")}</div></div>
+        <div className="card"><h3 className="card-title">{t("external.targetSeason", "Target season")}</h3><div className="hero-panel-value" style={{ fontSize: "20px", marginBottom: 0 }}>{selectedSeason ? (selectedSeason.tournamentName ? `${selectedSeason.tournamentName} • ${selectedSeason.name}` : selectedSeason.name) : "-"}</div></div>
       </div>
 
       <div className="filters-bar">
-        <select
-          className="filter-select"
-          value={competitionCode}
-          onChange={(event) => setCompetitionCode(event.target.value)}
-        >
-          {COMPETITIONS.map((competition) => (
-            <option key={competition.code} value={competition.code}>
-              {competition.label}
-            </option>
-          ))}
+        <select className="filter-select" value={competitionCode} onChange={(event) => setCompetitionCode(event.target.value)}>
+          {COMPETITIONS.map((competition) => <option key={competition.code} value={competition.code}>{competition.label}</option>)}
         </select>
 
-        <select
-          className="filter-select"
-          value={
-            selectedCompetitionMapping
-              ? String(selectedCompetitionMapping.internalSeasonId)
-              : manualSeasonId
-          }
-          onChange={(event) => setManualSeasonId(event.target.value)}
-          disabled={Boolean(selectedCompetitionMapping)}
-        >
-          {!seasons.length ? (
-            <option value="">No seasons</option>
-          ) : (
-            seasons.map((season) => (
-              <option key={season.id} value={season.id}>
-                {season.tournamentName
-                  ? `${season.tournamentName} • ${season.name}`
-                  : season.name}
-              </option>
-            ))
-          )}
+        <select className="filter-select" value={selectedCompetitionMapping ? String(selectedCompetitionMapping.internalSeasonId) : manualSeasonId} onChange={(event) => setManualSeasonId(event.target.value)} disabled={Boolean(selectedCompetitionMapping)}>
+          {!seasons.length ? <option value="">{t("standings.noSeasons", "No seasons")}</option> : seasons.map((season) => <option key={season.id} value={season.id}>{season.tournamentName ? `${season.tournamentName} • ${season.name}` : season.name}</option>)}
         </select>
 
-        <button
-          type="button"
-          className="hero-button hero-button-secondary"
-          onClick={handleSync}
-          disabled={syncLoading || loading || fullSyncLoading}
-        >
-          {syncLoading ? "Syncing..." : "Import + Sync"}
-        </button>
-
-        <button
-          type="button"
-          className="hero-button hero-button-primary"
-          onClick={handleFullSync}
-          disabled={fullSyncLoading || loading || syncLoading}
-        >
-          {fullSyncLoading ? "Running full sync..." : "Full sync pipeline"}
-        </button>
+        <button type="button" className="hero-button hero-button-secondary" onClick={handleSync} disabled={syncLoading || loading || fullSyncLoading}>{syncLoading ? t("external.syncing", "Syncing...") : t("external.importAndSync", "Import + Sync")}</button>
+        <button type="button" className="hero-button hero-button-primary" onClick={handleFullSync} disabled={fullSyncLoading || loading || syncLoading}>{fullSyncLoading ? t("external.runningFullSync", "Running full sync...") : t("external.fullSyncPipeline", "Full sync pipeline")}</button>
       </div>
 
-      {selectedCompetitionMapping ? (
-        <div className="loading-state" style={{ marginTop: "18px" }}>
-          Auto mapping active: {selectedCompetitionMapping.externalCompetitionName} →{" "}
-          {selectedCompetitionMapping.internalSeasonName}
-        </div>
-      ) : (
-        <div className="loading-state" style={{ marginTop: "18px" }}>
-          No competition mapping found. Manual season selection will be used.
-        </div>
-      )}
+      <div className="loading-state" style={{ marginTop: "18px" }}>{selectedCompetitionMapping ? `${t("external.autoMappingActive", "Auto mapping active")}: ${selectedCompetitionMapping.externalCompetitionName} -> ${selectedCompetitionMapping.internalSeasonName}` : t("external.noCompetitionMapping", "No competition mapping found. Manual season selection will be used.")}</div>
 
-      {loading ? <div className="loading-state">Loading sync page...</div> : null}
-
-      {message ? (
-        <div className="loading-state" style={{ marginTop: "18px" }}>
-          {message}
-        </div>
-      ) : null}
-
-      {error ? (
-        <div className="error-state" style={{ marginTop: "18px" }}>
-          {error}
-        </div>
-      ) : null}
+      {loading ? <div className="loading-state">{t("external.loadingSyncPage", "Loading sync page...")}</div> : null}
+      {message ? <div className="loading-state" style={{ marginTop: "18px" }}>{message}</div> : null}
+      {error ? <div className="error-state" style={{ marginTop: "18px" }}>{error}</div> : null}
     </div>
   );
 }

@@ -7,4 +7,5 @@ import java.util.Optional;
 
 public interface ExternalMatchSyncRepository extends JpaRepository<ExternalMatchSync, Long> {
     Optional<ExternalMatchSync> findByExternalMatchId(Long externalMatchId);
+    Optional<ExternalMatchSync> findByInternalMatchId(Long internalMatchId);
 }

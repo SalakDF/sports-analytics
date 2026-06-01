@@ -3,7 +3,7 @@ package com.diplomna.sports_analytics_backend.service;
 import com.diplomna.sports_analytics_backend.dto.response.ExternalMatchResponse;
 import com.diplomna.sports_analytics_backend.dto.response.ExternalStandingRowResponse;
 import com.diplomna.sports_analytics_backend.dto.response.ExternalStandingsResponse;
-import com.diplomna.sports_analytics_backend.integration.FootballDataClient;
+import com.diplomna.sports_analytics_backend.integration.ApiFootballClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -11,158 +11,174 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 public class ExternalFootballService {
 
-    private final FootballDataClient footballDataClient;
+    private final ApiFootballClient apiFootballClient;
     private final ObjectMapper objectMapper;
+
+    private static final Map<String, Integer> LEAGUE_IDS = Map.of(
+            "PL", 39,
+            "BL1", 78,
+            "PD", 140,
+            "SA", 135,
+            "CL", 2
+    );
+
+    private static final Map<String, String> LEAGUE_NAMES = Map.of(
+            "PL", "Premier League",
+            "BL1", "Bundesliga",
+            "PD", "La Liga",
+            "SA", "Serie A",
+            "CL", "Champions League"
+    );
 
     public List<ExternalMatchResponse> getCompetitionMatches(String competitionCode) {
         try {
-            String json = footballDataClient.getCompetitionMatches(competitionCode);
-            JsonNode root = objectMapper.readTree(json);
+            int leagueId = resolveLeagueId(competitionCode);
+            int seasonYear = currentSeasonYear();
+            String json = apiFootballClient.getFixturesByLeagueSeason(leagueId, seasonYear);
+            JsonNode response = objectMapper.readTree(json).path("response");
 
-            JsonNode competitionNode = root.path("competition");
-            String resolvedCompetitionCode = competitionNode.path("code").asText(null);
-            String resolvedCompetitionName = competitionNode.path("name").asText(null);
-
-            JsonNode matchesNode = root.path("matches");
             List<ExternalMatchResponse> result = new ArrayList<>();
+            if (!response.isArray()) return result;
 
-            for (JsonNode matchNode : matchesNode) {
-                result.add(toMatchResponse(matchNode, resolvedCompetitionCode, resolvedCompetitionName));
+            for (JsonNode fixtureNode : response) {
+                result.add(toMatchResponse(fixtureNode, competitionCode, LEAGUE_NAMES.get(competitionCode)));
             }
-
             return result;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to map external football matches", e);
+            throw new RuntimeException("Failed to map API-Football matches", e);
         }
     }
 
     public ExternalStandingsResponse getCompetitionStandings(String competitionCode) {
         try {
-            String json = footballDataClient.getCompetitionStandings(competitionCode);
-            JsonNode root = objectMapper.readTree(json);
+            int leagueId = resolveLeagueId(competitionCode);
+            int seasonYear = currentSeasonYear();
+            String json = apiFootballClient.getStandingsByLeagueSeason(leagueId, seasonYear);
+            JsonNode response = objectMapper.readTree(json).path("response");
 
-            JsonNode competitionNode = root.path("competition");
-            JsonNode seasonNode = root.path("season");
-            JsonNode standingsNode = root.path("standings");
+            List<ExternalStandingRowResponse> rows = new ArrayList<>();
+            if (response.isArray() && !response.isEmpty()) {
+                JsonNode standings = response.get(0).path("league").path("standings");
+                JsonNode table = standings.isArray() && !standings.isEmpty() ? standings.get(0) : null;
 
-            JsonNode mainTableNode = null;
-
-            for (JsonNode standingNode : standingsNode) {
-                String type = standingNode.path("type").asText("");
-                if ("TOTAL".equalsIgnoreCase(type)) {
-                    mainTableNode = standingNode;
-                    break;
+                if (table != null && table.isArray()) {
+                    for (JsonNode row : table) {
+                        rows.add(
+                                ExternalStandingRowResponse.builder()
+                                        .position(row.path("rank").asInt())
+                                        .teamId(row.path("team").path("id").asLong())
+                                        .teamName(row.path("team").path("name").asText(null))
+                                        .playedGames(row.path("all").path("played").asInt())
+                                        .wins(row.path("all").path("win").asInt())
+                                        .draws(row.path("all").path("draw").asInt())
+                                        .losses(row.path("all").path("lose").asInt())
+                                        .goalsFor(row.path("all").path("goals").path("for").asInt())
+                                        .goalsAgainst(row.path("all").path("goals").path("against").asInt())
+                                        .points(row.path("points").asInt())
+                                        .build()
+                        );
+                    }
                 }
             }
 
-            if (mainTableNode == null && standingsNode.isArray() && !standingsNode.isEmpty()) {
-                mainTableNode = standingsNode.get(0);
-            }
-
-            if (mainTableNode == null) {
-                return ExternalStandingsResponse.builder()
-                        .competitionCode(competitionNode.path("code").asText(null))
-                        .competitionName(competitionNode.path("name").asText(null))
-                        .seasonStartDate(seasonNode.path("startDate").asText(null))
-                        .seasonEndDate(seasonNode.path("endDate").asText(null))
-                        .tableType(null)
-                        .rows(List.of())
-                        .build();
-            }
-
-            List<ExternalStandingRowResponse> rows = new ArrayList<>();
-            JsonNode tableRows = mainTableNode.path("table");
-
-            for (JsonNode row : tableRows) {
-                rows.add(
-                        ExternalStandingRowResponse.builder()
-                                .position(row.path("position").asInt())
-                                .teamId(row.path("team").path("id").asLong())
-                                .teamName(row.path("team").path("name").asText(null))
-                                .playedGames(row.path("playedGames").asInt())
-                                .wins(row.path("won").asInt())
-                                .draws(row.path("draw").asInt())
-                                .losses(row.path("lost").asInt())
-                                .goalsFor(row.path("goalsFor").asInt())
-                                .goalsAgainst(row.path("goalsAgainst").asInt())
-                                .points(row.path("points").asInt())
-                                .build()
-                );
-            }
-
             return ExternalStandingsResponse.builder()
-                    .competitionCode(competitionNode.path("code").asText(null))
-                    .competitionName(competitionNode.path("name").asText(null))
-                    .seasonStartDate(seasonNode.path("startDate").asText(null))
-                    .seasonEndDate(seasonNode.path("endDate").asText(null))
-                    .tableType(mainTableNode.path("type").asText(null))
+                    .competitionCode(competitionCode)
+                    .competitionName(LEAGUE_NAMES.get(competitionCode))
+                    .seasonStartDate(null)
+                    .seasonEndDate(null)
+                    .tableType("TOTAL")
                     .rows(rows)
                     .build();
-
         } catch (Exception e) {
-            throw new RuntimeException("Failed to map external football standings", e);
+            throw new RuntimeException("Failed to map API-Football standings", e);
         }
     }
 
     public List<ExternalMatchResponse> getTeamMatches(Long teamId) {
         try {
-            String json = footballDataClient.getTeamMatches(teamId);
-            JsonNode root = objectMapper.readTree(json);
-
-            JsonNode matchesNode = root.path("matches");
+            String json = apiFootballClient.getFixturesByTeam(teamId, 12);
+            JsonNode response = objectMapper.readTree(json).path("response");
             List<ExternalMatchResponse> result = new ArrayList<>();
+            if (!response.isArray()) return result;
 
-            for (JsonNode matchNode : matchesNode) {
-                JsonNode competitionNode = matchNode.path("competition");
-                String competitionCode = competitionNode.path("code").asText(null);
-                String competitionName = competitionNode.path("name").asText(null);
-
-                result.add(toMatchResponse(matchNode, competitionCode, competitionName));
+            for (JsonNode fixtureNode : response) {
+                JsonNode leagueNode = fixtureNode.path("league");
+                String competitionName = leagueNode.path("name").asText(null);
+                String competitionCode = mapLeagueIdToCode(leagueNode.path("id").asInt());
+                result.add(toMatchResponse(fixtureNode, competitionCode, competitionName));
             }
 
             return result.stream().limit(12).toList();
         } catch (Exception e) {
-            throw new RuntimeException("Failed to map external team matches", e);
+            throw new RuntimeException("Failed to map API-Football team matches", e);
         }
     }
 
     private ExternalMatchResponse toMatchResponse(
-            JsonNode matchNode,
+            JsonNode fixtureNode,
             String competitionCode,
             String competitionName
     ) {
-        Integer homeScore = null;
-        Integer awayScore = null;
+        JsonNode fixture = fixtureNode.path("fixture");
+        JsonNode teams = fixtureNode.path("teams");
+        JsonNode goals = fixtureNode.path("goals");
 
-        JsonNode fullTimeNode = matchNode.path("score").path("fullTime");
-
-        if (!fullTimeNode.isMissingNode()) {
-            if (!fullTimeNode.path("home").isNull() && !fullTimeNode.path("home").isMissingNode()) {
-                homeScore = fullTimeNode.path("home").asInt();
-            }
-
-            if (!fullTimeNode.path("away").isNull() && !fullTimeNode.path("away").isMissingNode()) {
-                awayScore = fullTimeNode.path("away").asInt();
-            }
-        }
+        Integer homeScore = goals.path("home").isNull() ? null : goals.path("home").asInt();
+        Integer awayScore = goals.path("away").isNull() ? null : goals.path("away").asInt();
 
         return ExternalMatchResponse.builder()
-                .id(matchNode.path("id").asLong())
+                .id(fixture.path("id").asLong())
                 .competitionCode(competitionCode)
                 .competitionName(competitionName)
-                .utcDate(matchNode.path("utcDate").asText(null))
-                .status(matchNode.path("status").asText(null))
-                .homeTeamId(matchNode.path("homeTeam").path("id").asLong())
-                .homeTeamName(matchNode.path("homeTeam").path("name").asText(null))
-                .awayTeamId(matchNode.path("awayTeam").path("id").asLong())
-                .awayTeamName(matchNode.path("awayTeam").path("name").asText(null))
+                .utcDate(fixture.path("date").asText(null))
+                .status(mapStatusShortToLegacyStatus(fixture.path("status").path("short").asText(null)))
+                .homeTeamId(teams.path("home").path("id").asLong())
+                .homeTeamName(teams.path("home").path("name").asText(null))
+                .awayTeamId(teams.path("away").path("id").asLong())
+                .awayTeamName(teams.path("away").path("name").asText(null))
                 .homeScore(homeScore)
                 .awayScore(awayScore)
                 .build();
     }
+
+    private int resolveLeagueId(String competitionCode) {
+        Integer id = LEAGUE_IDS.get(competitionCode);
+        if (id == null) {
+            throw new RuntimeException("Unsupported competition code for API-Football: " + competitionCode);
+        }
+        return id;
+    }
+
+    private int currentSeasonYear() {
+        int year = java.time.LocalDate.now().getYear();
+        int month = java.time.LocalDate.now().getMonthValue();
+        return month >= 7 ? year : year - 1;
+    }
+
+    private String mapLeagueIdToCode(int leagueId) {
+        if (leagueId == 39) return "PL";
+        if (leagueId == 78) return "BL1";
+        if (leagueId == 140) return "PD";
+        if (leagueId == 135) return "SA";
+        if (leagueId == 2) return "CL";
+        return null;
+    }
+
+    private String mapStatusShortToLegacyStatus(String shortStatus) {
+        if (shortStatus == null || shortStatus.isBlank()) return "TIMED";
+        return switch (shortStatus) {
+            case "FT", "AET", "PEN", "WO" -> "FINISHED";
+            case "1H", "2H", "HT", "ET", "BT", "P" -> "IN_PLAY";
+            case "PST", "SUSP", "INT", "ABD" -> "POSTPONED";
+            case "CANC" -> "CANCELED";
+            default -> "TIMED";
+        };
+    }
 }
+

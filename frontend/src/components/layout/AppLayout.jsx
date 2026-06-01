@@ -1,6 +1,5 @@
 import { Outlet } from "react-router-dom";
 import Header from "./Header";
-import Footer from "./Footer";
 import ScrollToTop from "../common/ScrollToTop";
 
 export default function AppLayout() {
@@ -12,8 +11,6 @@ export default function AppLayout() {
       <main className="page-container">
         <Outlet />
       </main>
-
-      <Footer />
     </div>
   );
 }

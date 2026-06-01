@@ -13,8 +13,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -107,6 +109,61 @@ public class MatchSeedService {
         }
 
         return "Seeded fixtures created: " + created;
+    }
+
+    public String clearDemoFixtures() {
+        List<Match> allMatches = matchRepository.findAllByOrderByScheduledAtDesc();
+
+        Set<String> demoVenues = Set.of(
+                "City Stadium",
+                "National Arena",
+                "Central Park Stadium",
+                "Riverside Stadium",
+                "Metropolitan Stadium",
+                "Demo Live Arena",
+                "Demo Future Stadium"
+        );
+
+        List<Match> toDelete = allMatches.stream()
+                .filter(this::isDemoByExternalId)
+                .toList();
+
+        Set<Long> toDeleteIds = new HashSet<>(toDelete.stream().map(Match::getId).toList());
+
+        List<Match> additionallyDetected = allMatches.stream()
+                .filter(match -> !toDeleteIds.contains(match.getId()))
+                .filter(match -> {
+                    String venue = match.getVenue();
+                    String roundName = match.getRoundName();
+                    return (venue != null && (demoVenues.contains(venue) || venue.startsWith("Demo ")))
+                            || "Matchweek 32".equals(roundName)
+                            || "Matchweek 33".equals(roundName)
+                            || (roundName != null && (
+                                    roundName.startsWith("Live Round")
+                                            || roundName.startsWith("Upcoming Round")
+                            ));
+                })
+                .toList();
+
+        List<Match> allDemoMatches = new ArrayList<>(toDelete);
+        allDemoMatches.addAll(additionallyDetected);
+
+        if (allDemoMatches.isEmpty()) {
+            return "No demo fixtures found.";
+        }
+
+        matchRepository.deleteAll(allDemoMatches);
+        return "Removed demo fixtures: " + allDemoMatches.size();
+    }
+
+    private boolean isDemoByExternalId(Match match) {
+        String externalId = match.getExternalId();
+        if (externalId == null || externalId.isBlank()) {
+            return false;
+        }
+
+        return externalId.startsWith("seed:")
+                || externalId.matches("match-\\d+");
     }
 
     private List<Team> resolveSeasonTeams(Long seasonId) {

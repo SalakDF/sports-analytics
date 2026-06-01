@@ -3,15 +3,16 @@ package com.diplomna.sports_analytics_backend.service;
 import com.diplomna.sports_analytics_backend.dto.response.ExternalStandingRowResponse;
 import com.diplomna.sports_analytics_backend.dto.response.ExternalStandingsResponse;
 import com.diplomna.sports_analytics_backend.dto.response.ExternalTeamImportResultResponse;
+import com.diplomna.sports_analytics_backend.dto.response.TeamNameCleanupResponse;
 import com.diplomna.sports_analytics_backend.entity.Team;
 import com.diplomna.sports_analytics_backend.repository.TeamRepository;
+import com.diplomna.sports_analytics_backend.util.TeamNameSanitizer;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -20,9 +21,6 @@ public class ExternalTeamImportService {
 
     private final ExternalFootballService externalFootballService;
     private final TeamRepository teamRepository;
-
-    private static final Pattern NON_ALNUM = Pattern.compile("[^a-z0-9 ]");
-    private static final Pattern MULTI_SPACE = Pattern.compile("\\s+");
 
     public ExternalTeamImportResultResponse importMissingTeams(String competitionCode) {
         if (competitionCode == null || competitionCode.isBlank()) {
@@ -43,22 +41,34 @@ public class ExternalTeamImportService {
                 continue;
             }
 
-            String normalizedExternalName = normalizeName(externalTeam.getTeamName());
+            String normalizedExternalName = TeamNameSanitizer.normalizeName(externalTeam.getTeamName());
 
-            boolean exists = existingTeams.stream().anyMatch(team ->
-                    normalizeName(team.getName()).equals(normalizedExternalName)
-            );
+            Team existingTeam = existingTeams.stream()
+                    .filter(team -> TeamNameSanitizer.normalizeName(team.getName()).equals(normalizedExternalName))
+                    .findFirst()
+                    .orElse(null);
 
-            if (exists) {
+            if (existingTeam != null) {
+                String sanitizedName = TeamNameSanitizer.sanitizeDisplayName(existingTeam.getName());
+                String sanitizedShortName = TeamNameSanitizer.buildShortName(existingTeam.getName());
+                if (!sanitizedName.equals(existingTeam.getName())
+                        || existingTeam.getShortName() == null
+                        || existingTeam.getShortName().isBlank()
+                        || !sanitizedShortName.equals(existingTeam.getShortName())) {
+                    existingTeam.setName(sanitizedName);
+                    existingTeam.setShortName(sanitizedShortName);
+                    teamRepository.save(existingTeam);
+                }
                 alreadyExistingTeams++;
                 continue;
             }
 
             Team team = new Team();
-            team.setName(externalTeam.getTeamName());
-            team.setShortName(buildShortName(externalTeam.getTeamName()));
+            String sanitizedName = TeamNameSanitizer.sanitizeDisplayName(externalTeam.getTeamName());
+            team.setName(sanitizedName);
+            team.setShortName(TeamNameSanitizer.buildShortName(sanitizedName));
             team.setCountry(resolveCountryByCompetition(competitionCode));
-            team.setDescription("Imported from football-data.org");
+            team.setDescription("Imported from API-Football");
 
             Team saved = teamRepository.save(team);
             existingTeams.add(saved);
@@ -73,6 +83,44 @@ public class ExternalTeamImportService {
                 .build();
     }
 
+    public TeamNameCleanupResponse cleanupAllTeamNames() {
+        List<Team> teams = teamRepository.findAll();
+        List<Team> changedTeams = new ArrayList<>();
+        int updated = 0;
+
+        for (Team team : teams) {
+            String sanitizedName = TeamNameSanitizer.sanitizeDisplayName(team.getName());
+            String sanitizedShortName = TeamNameSanitizer.buildShortName(
+                    team.getShortName() != null && !team.getShortName().isBlank()
+                            ? team.getShortName()
+                            : sanitizedName
+            );
+
+            boolean needsUpdate = !sanitizedName.equals(team.getName())
+                    || team.getShortName() == null
+                    || team.getShortName().isBlank()
+                    || !sanitizedShortName.equals(team.getShortName());
+
+            if (!needsUpdate) {
+                continue;
+            }
+
+            team.setName(sanitizedName);
+            team.setShortName(sanitizedShortName);
+            changedTeams.add(team);
+            updated++;
+        }
+
+        if (!changedTeams.isEmpty()) {
+            teamRepository.saveAll(changedTeams);
+        }
+
+        return TeamNameCleanupResponse.builder()
+                .totalTeams(teams.size())
+                .updatedTeams(updated)
+                .build();
+    }
+
     private String resolveCountryByCompetition(String competitionCode) {
         return switch (competitionCode) {
             case "PL" -> "England";
@@ -84,40 +132,4 @@ public class ExternalTeamImportService {
         };
     }
 
-    private String buildShortName(String name) {
-        if (name == null || name.isBlank()) {
-            return null;
-        }
-
-        String cleaned = name
-                .replace("Football Club", "")
-                .replace("FC", "")
-                .replace("AFC", "")
-                .trim();
-
-        if (cleaned.length() <= 12) {
-            return cleaned;
-        }
-
-        return cleaned.substring(0, 12).trim();
-    }
-
-    private String normalizeName(String value) {
-        String normalized = value.toLowerCase(Locale.ROOT).trim();
-
-        normalized = normalized
-                .replace("football club", " ")
-                .replace("soccer club", " ")
-                .replace(" fc ", " ")
-                .replace(" afc ", " ")
-                .replace(" cf ", " ")
-                .replace(" sc ", " ")
-                .replace(" ac ", " ")
-                .replace(" club ", " ");
-
-        normalized = NON_ALNUM.matcher(normalized).replaceAll(" ");
-        normalized = MULTI_SPACE.matcher(normalized).replaceAll(" ").trim();
-
-        return normalized;
-    }
 }
