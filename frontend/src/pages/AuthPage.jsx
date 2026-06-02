@@ -109,6 +109,49 @@ export default function AuthPage() {
           {message ? <div className="loading-state" style={{ marginTop: "16px" }}>{message}</div> : null}
           {error ? <div className="error-state" style={{ marginTop: "16px" }}>{error}</div> : null}
         </div>
+
+        <div className="card auth-info-card auth-info-card-premium auth-feature-card">
+          <div className="auth-card-top">
+            <span className="page-kicker">{t("auth.title", "Authentication")}</span>
+            <h2 className="section-title" style={{ margin: 0 }}>
+              {mode === "login"
+                ? t("auth.signInContinue", "Sign in to continue")
+                : t("auth.startPlatform", "Start using the platform")}
+            </h2>
+          </div>
+
+          <div className="grid" style={{ gap: "14px" }}>
+            <div className="mini-info-card">
+              <div className="mini-info-title">{t("auth.login", "Login")}</div>
+              <div className="mini-info-text">
+                {t(
+                  "auth.loginHint",
+                  "Open favorites, save matches and quickly return to your tracked teams."
+                )}
+              </div>
+            </div>
+
+            <div className="mini-info-card">
+              <div className="mini-info-title">{t("auth.register", "Register")}</div>
+              <div className="mini-info-text">
+                {t(
+                  "auth.registerHint",
+                  "Create a new account in a few seconds and keep your own football workspace."
+                )}
+              </div>
+            </div>
+
+            <div className="mini-info-card">
+              <div className="mini-info-title">{t("header.matches", "Matches")}</div>
+              <div className="mini-info-text">
+                {t(
+                  "auth.matchesHint",
+                  "After login you can move between live, upcoming and finished matches without losing your saved items."
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
